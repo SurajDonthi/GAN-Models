@@ -5,11 +5,58 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Python: Current File",
+      "name": "Training",
       "type": "python",
       "request": "launch",
-      "program": "${workspaceFolder}/src/main.py",
-      "console": "integratedTerminal"
+      "program": "${workspaceFolder}/gan_models/main.py",
+      "console": "integratedTerminal",
+      "pythonArgs": ["-W", "ignore::UserWarning::0"],
+      "args": [
+        "--model",
+        "gan",
+        "--data_dir",
+        "data/",
+        "--description",
+        "Training the model with Vanilla GAN",
+        "--weights_summary",
+        "full",
+        "gpus",
+        "1",
+        "--git_tag",
+        "True",
+        "--debug",
+        "False",
+        "--max_epochs",
+        "20"
+      ]
+    }
+    {
+      "name": "Debugging",
+      "type": "python",
+      "request": "launch",
+      "program": "${workspaceFolder}/gan_models/main.py",
+      "console": "integratedTerminal",
+      "pythonArgs": ["-W", "ignore::UserWarning::0"],
+      "args": [
+        "--model",
+        "gan",
+        "--data_dir",
+        "data/",
+        "--description",
+        "Testing the model initially",
+        "--weights_summary",
+        "full",
+        "gpus",
+        "1",
+        "--git_tag",
+        "False",
+        "--debug",
+        "True",
+        "--limit_train_batches",
+        "0.05",
+        "--max_epochs",
+        "2"
+      ]
     }
   ]
 }
