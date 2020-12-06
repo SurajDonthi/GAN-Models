@@ -1,4 +1,3 @@
-import pytorch_lightning as pl
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -48,10 +47,10 @@ class Discriminator(nn.Module):
         return X
 
 
-class GAN(Generator, pl.LightningModule):
-    def __init__(self, latent_dim, out_dim):
-        super().__init__(latent_dim, out_dim)
-        self.discriminator = Discriminator(out_dim)
+class GAN:
+    def __init__(self):
+        self.discriminator = Discriminator
+        self.generator = Generator
 
 
 # ToDo: Implement the below models with similar interface!
@@ -61,24 +60,38 @@ class FMGAN:
     """
     Feature Matching for training the Vanilla GAN model.
     """
-    pass
+
+    def __init__(self) -> None:
+        self.discriminator = None
+        self.generator = None
 
 
 class WassersteinGAN:
-    pass
+
+    def __init__(self) -> None:
+        self.discriminator = None
+        self.generator = None
 
 
 class CGAN:
-    pass
+    def __init__(self) -> None:
+        self.discriminator = None
+        self.generator = None
 
 
 class InfoGAN:
-    pass
+    def __init__(self) -> None:
+        self.discriminator = None
+        self.generator = None
 
 
 class CycleGAN:
-    pass
+    def __init__(self) -> None:
+        self.discriminator = None
+        self.generator = None
 
 
 class BigGAN:
-    pass
+    def __init__(self) -> None:
+        self.discriminator = None
+        self.generator = None

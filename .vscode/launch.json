@@ -20,14 +20,14 @@
         "Training the model with Vanilla GAN",
         "--weights_summary",
         "full",
-        "gpus",
+        "--gpus",
         "1",
         "--git_tag",
         "True",
         "--debug",
         "False",
         "--max_epochs",
-        "20"
+        "2"
       ]
     }
     {
@@ -46,7 +46,7 @@
         "Testing the model initially",
         "--weights_summary",
         "full",
-        "gpus",
+        "--gpus",
         "1",
         "--git_tag",
         "False",

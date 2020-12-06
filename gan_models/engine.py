@@ -1,9 +1,8 @@
-import os
 from argparse import ArgumentParser
 
 import torch
-from torch._C import device, dtype
 import torch.nn.functional as F
+import pytorch_lightning as pl
 from pytorch_lightning.metrics.functional import accuracy
 from torch.optim import Adam
 from torchvision.utils import make_grid
@@ -14,8 +13,8 @@ from utils import str2bool
 
 # Use this in main.py!
 MODELS = {
-    'gan': GAN,
-    'vanilla_gan': GAN
+    'gan': GAN(),
+    'vanilla_gan': GAN()
 }
 
 LOSSES = {'bce': F.binary_cross_entropy,
@@ -24,20 +23,18 @@ LOSSES = {'bce': F.binary_cross_entropy,
           'kl_div': F.kl_div, 'mse': F.mse_loss,
           'l1_loss': F.l1_loss}
 
-# model = 'gan'
-# model = os.getenv('MODEL')
 
-# ToDo: Implement a Factory for parenting different models.
-
-
-class Engine(GAN):
+class Engine(pl.LightningModule):
 
     def __init__(self, out_dim=784, latent_dim=10, learning_rate=0.0001,
-                 loss_func='bce'):
-        super().__init__(latent_dim, out_dim)
+                 model='gan', loss_func='bce'):
+        super().__init__()
 
         self.save_hyperparameters()
         self.loss_func = LOSSES[loss_func]
+        self.model = MODELS[model]
+        self.discriminator = self.model.discriminator(out_dim)
+        self.generator = self.model.generator(latent_dim, out_dim)
 
     @staticmethod
     def add_model_specific_args(parent_parser):
@@ -64,6 +61,9 @@ class Engine(GAN):
         g_optim = Adam(self.parameters(),
                        lr=self.hparams.learning_rate)
         return [d_optim, g_optim]
+
+    def forward(self, X):
+        return self.generator(X)
 
     def discriminator_loss(self, X):
         # Real Loss
@@ -115,8 +115,8 @@ class Engine(GAN):
 
         return loss
 
-    def on_train_epoch_end(self, outputs) -> None:
+    # def on_train_epoch_end(self, outputs) -> None:
 
-        self.logger.experiment.add_image(
-            'Generated Images', make_grid(self.X_hat), self.current_epoch
-        )
+    #     self.logger.experiment.add_image(
+    #         'Generated Images', make_grid(self.X_hat), self.current_epoch
+    #     )

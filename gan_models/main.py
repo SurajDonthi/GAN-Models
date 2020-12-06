@@ -1,11 +1,10 @@
 import os
 from argparse import ArgumentParser
 
-import torch
 from pathlib2 import Path
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.loggers.test_tube import TestTubeLogger
+from pytorch_lightning.loggers import TensorBoardLogger, TestTubeLogger
 from torch.utils.data import ConcatDataset, DataLoader
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST, FashionMNIST
@@ -22,6 +21,9 @@ def main(args):
                                create_git_tag=args.git_tag
                                )
     tt_logger.experiment
+
+    # tb_logger = TensorBoardLogger(
+    #     save_dir=args.log_path, name="", version=tt_logger.version)
 
     log_dir = Path(tt_logger.save_dir) / f"version_{tt_logger.version}"
 
