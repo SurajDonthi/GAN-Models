@@ -8,8 +8,8 @@ from torch.optim import Adam
 from torchvision.utils import make_grid
 
 # import all GAN models here.
-from models import GAN
-from utils import str2bool
+from gan_models.models import GAN
+from gan_models.utils import str2bool
 
 # Use this in main.py!
 MODELS = {
