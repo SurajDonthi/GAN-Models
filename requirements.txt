@@ -1,0 +1,9 @@
+torch
+torchvision
+pytorch-lightning
+tensorboard
+test-tube
+pathlib2
+joblib
+numpy
+matplotlib
