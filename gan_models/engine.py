@@ -103,8 +103,7 @@ class Engine(pl.LightningModule):
 
     def training_step(self, batch, batch_idx, optimizer_idx):
         X, _ = batch
-        if batch_idx == 0:
-            self.shape = tuple(X.shape)
+        self.shape = tuple(X.shape)
         X = torch.flatten(X, start_dim=1)
         if optimizer_idx == 0:
             loss = self.discriminator_loss(X)        # , acc
