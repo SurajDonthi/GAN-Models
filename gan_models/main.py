@@ -9,9 +9,9 @@ from torch.utils.data import ConcatDataset, DataLoader
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST, FashionMNIST
 
-from gan_models.data import CustomDataLoader
-from gan_models.engine import Engine
-from gan_models.utils import save_args
+from data import CustomDataLoader
+from engine import Engine
+from utils import save_args
 
 
 def main(args):

@@ -27,7 +27,7 @@
         "--debug",
         "False",
         "--max_epochs",
-        "2"
+        "20"
       ]
     }
     {
