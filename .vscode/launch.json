@@ -17,9 +17,11 @@
         "--data_dir",
         "data/",
         "--description",
-        "Training the model with Vanilla GAN",
+        "Vanilla GAN; Accuracy removed from logging; 100 epochs",
         "--weights_summary",
         "full",
+        "--train_batchsize",
+        "128",
         "--gpus",
         "1",
         "--git_tag",
@@ -27,7 +29,7 @@
         "--debug",
         "False",
         "--max_epochs",
-        "20"
+        "100"
       ]
     }
     {
@@ -51,7 +53,7 @@
         "--git_tag",
         "False",
         "--debug",
-        "True",
+        "False",
         "--limit_train_batches",
         "0.05",
         "--max_epochs",

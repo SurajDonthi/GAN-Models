@@ -72,7 +72,7 @@ class Engine(pl.LightningModule):
         y = torch.ones_like(y_hat)
         real_loss = self.loss_func(y_hat, y)
 
-        real_acc = accuracy(torch.round(y_hat), y)
+        # real_acc = accuracy(torch.round(y_hat), y)
 
         # Fake_loss
         latent_vector = torch.randn(
@@ -81,13 +81,13 @@ class Engine(pl.LightningModule):
         y_hat = self.discriminator(self.X_hat)
         y = torch.zeros_like(y_hat)
         fake_loss = self.loss_func(y_hat, y)
-        fake_acc = accuracy(torch.round(y_hat), y, num_classes=2)
+        # fake_acc = accuracy(torch.round(y_hat), y, num_classes=2)
 
         d_loss = real_loss + fake_loss
 
-        acc = real_acc + fake_acc
+        # acc = real_acc + fake_acc
 
-        return d_loss, acc
+        return d_loss   # , acc
 
     def generator_loss(self, X):
         # Fake Loss
@@ -97,26 +97,33 @@ class Engine(pl.LightningModule):
         y_hat = self.discriminator(self.X_hat)
         y = torch.ones_like(y_hat)
         g_loss = self.loss_func(y_hat, y)
-        acc = accuracy(torch.round(y_hat), y, num_classes=2)
+        # acc = accuracy(torch.round(y_hat), y, num_classes=2)
 
-        return g_loss, acc
+        return g_loss  # , acc
 
     def training_step(self, batch, batch_idx, optimizer_idx):
         X, _ = batch
+        if batch_idx == 0:
+            self.shape = tuple(X.shape)
         X = torch.flatten(X, start_dim=1)
         if optimizer_idx == 0:
-            loss, acc = self.discriminator_loss(X)
-            logs = {"Loss/d_loss": loss, "Accuracy/d_acc": acc}
+            loss = self.discriminator_loss(X)        # , acc
+            logs = {"Loss/d_loss": loss,
+                    # "Accuracy/d_acc": acc
+                    }
         if optimizer_idx == 1:
-            loss, acc = self.generator_loss(X)
-            logs = {"Loss/g_loss": loss, "Accuracy/g_acc": acc}
+            loss = self.generator_loss(X)        # , acc
+            logs = {"Loss/g_loss": loss,
+                    # "Accuracy/g_acc": acc
+                    }
 
         self.log_dict(logs, prog_bar=True, on_step=True, on_epoch=True)
 
         return loss
 
-    # def on_train_epoch_end(self, outputs) -> None:
+    def on_train_epoch_end(self, outputs) -> None:
 
-    #     self.logger.experiment.add_image(
-    #         'Generated Images', make_grid(self.X_hat), self.current_epoch
-    #     )
+        self.logger.experiment.add_image(
+            'Generated Images', make_grid(self.X_hat.reshape(self.shape)),
+            self.current_epoch
+        )
