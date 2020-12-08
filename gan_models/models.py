@@ -66,6 +66,12 @@ class FMGAN:
         self.generator = None
 
 
+class DCGAN:
+    def __init__(self) -> None:
+        self.discriminator = None
+        self.generator = None
+
+
 class WassersteinGAN:
 
     def __init__(self) -> None:
