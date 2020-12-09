@@ -1,19 +1,19 @@
-from argparse import ArgumentParser
-from typing import Optional
+import inspect
+from argparse import ArgumentParser, Namespace
+from typing import Any, List, Optional, Tuple, Union, Literal
 
+import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
-import pytorch_lightning as pl
 from pytorch_lightning.metrics.functional import accuracy
+from pytorch_lightning.utilities import parsing
 from torch.optim import Adam
 from torch.optim.lr_scheduler import StepLR
 from torchvision.utils import make_grid
 
 # import all GAN models here.
 from models import GAN
-from utils import str2bool
 
-# Use this in main.py!
 MODELS = {
     'gan': GAN(),
     'vanilla_gan': GAN()
@@ -29,9 +29,12 @@ LOSSES = {'bce': F.binary_cross_entropy,
 class Engine(pl.LightningModule):
 
     # ToDo: Provide the `out_dim` from the dataset!
-    def __init__(self, latent_dim: int = 10, out_dim: int = 784,
-                 model: str = 'gan',
-                 criterion: str = 'bce', learning_rate: float = 0.0001,
+    def __init__(self, out_dim: int, latent_dim: int = 10,
+                 model: Literal[tuple(MODELS.keys())] = 'gan',
+                 criterion: Literal[tuple(LOSSES.keys())] = 'bce',
+                 learning_rate: float = 0.0001,
+                 #  Todo: For Optimizers & Schedulers -> Take input as dictionary for various arguments to be passed to them
+                 optim_b1: float = 0.5, optim_b2: float = 0.999,
                  lr_scheduler: bool = False,
                  lr_stepsize: int = 100, lr_gamma: float = 0.1):
         super().__init__()
@@ -43,39 +46,136 @@ class Engine(pl.LightningModule):
         self.generator = self.model.generator(latent_dim, out_dim)
 
     @staticmethod
-    def add_model_specific_args(parent_parser):
+    def add_additional_args(parent_parser):
         parser = ArgumentParser(parents=[parent_parser], add_help=False)
-        parser.add_argument('--latent_dim',
-                            type=int, default=10)
-        parser.add_argument('-m', '--model', default='gan',
-                            required=False, type=str)
-        parser.add_argument('-c', '--criterion', type=str,
-                            choices=LOSSES.keys(),
-                            default='bce')
-        parser.add_argument('-lr', '--learning_rate',
-                            type=float, default=0.0001)
-        parser.add_argument('--lr_scheduler',
-                            type=str2bool, default=False)
-        parser.add_argument('--lr_stepsize',
-                            type=int, default=100)
-        parser.add_argument('--lr_gamma',
-                            type=float, default=0.1)
         parser.add_argument('-lp', '--log_path', type=str,
-                            default='./lightning_logs')
+                            default='./logs')
         parser.add_argument('-des', '--description', required=False, type=str)
         parser.add_argument('-gt', '--git_tag', required=False, const=False,
-                            type=str2bool, nargs='?')
+                            type=parsing.str_to_bool, nargs='?')
         parser.add_argument('--debug', required=False, const=False, nargs='?',
-                            type=str2bool)
+                            type=parsing.str_to_bool)
         return parser
+
+    @classmethod
+    def add_argparse_args(cls, parent_parser: ArgumentParser) -> ArgumentParser:
+        r"""Extends existing argparse by default `LightningDataModule` attributes.
+        """
+        parser = ArgumentParser(parents=[parent_parser], add_help=False)
+        added_args = [x.dest for x in parser._actions]
+
+        blacklist = ["kwargs"]
+        depr_arg_names = blacklist + added_args
+        depr_arg_names = set(depr_arg_names)
+
+        allowed_types = (str, int, float, bool)
+
+        # TODO: get "help" from docstring :)
+        for arg, arg_types, arg_default in (
+            at
+            for at in cls.get_init_arguments_and_types()
+            if at[0] not in depr_arg_names
+        ):
+            arg_types = [at for at in arg_types if (
+                at in allowed_types) or isinstance(at, str)]
+            if not arg_types:
+                # skip argument with not supported type
+                continue
+
+            arg_kwargs = {}
+            arg_choices = None
+            if bool in arg_types:
+                arg_kwargs.update(nargs="?", const=True)
+                # if the only arg type is bool
+                if len(arg_types) == 1:
+                    use_type = parsing.str_to_bool
+                # if only two args (str, bool)
+                elif len(arg_types) == 2 and set(arg_types) == {str, bool}:
+                    use_type = parsing.str_to_bool_or_str
+                else:
+                    # filter out the bool as we need to use more general
+                    use_type = [at for at in arg_types if at is not bool][0]
+            elif all(isinstance(at, str) for at in arg_types):
+                use_type = str
+                arg_choices = arg_types
+            else:
+                use_type = arg_types[0]
+
+            if arg_default == inspect._empty:
+                arg_default = None
+
+            parser.add_argument(
+                f"--{arg}",
+                dest=arg,
+                default=arg_default,
+                # required=True if not arg_default else False,
+                type=use_type,
+                choices=arg_choices,
+                help=f"autogenerated by plb.{cls.__name__}",
+                **arg_kwargs,
+            )
+
+        return parser
+
+    @classmethod
+    def from_argparse_args(cls, args: Union[Namespace, ArgumentParser], **kwargs):
+        """
+        Create an instance from CLI arguments.
+
+        Args:
+            args: The parser or namespace to take arguments from. Only known arguments will be
+             parsed and passed to the :class:`LightningDataModule`.
+            **kwargs: Additional keyword arguments that may override ones in the parser or namespace.
+             These must be valid DataModule arguments.
+
+        Example::
+
+            parser = ArgumentParser(add_help=False)
+            parser = LightningDataModule.add_argparse_args(parser)
+            module = LightningDataModule.from_argparse_args(args)
+
+        """
+        if isinstance(args, ArgumentParser):
+            args = cls.parse_argparser(args)
+        params = vars(args)
+
+        # we only want to pass in valid DataModule args, the rest may be user specific
+        valid_kwargs = inspect.signature(cls.__init__).parameters
+        datamodule_kwargs = dict(
+            (name, params[name]) for name in valid_kwargs if name in params
+        )
+        datamodule_kwargs.update(**kwargs)
+
+        return cls(**datamodule_kwargs)
+
+    @classmethod
+    def get_init_arguments_and_types(cls) -> List[Tuple[str, Tuple, Any]]:
+        r"""Scans the DataModule signature and returns argument names, types and default values.
+        Returns:
+            List with tuples of 3 values:
+            (argument name, set with argument types, argument default value).
+        """
+        datamodule_default_params = inspect.signature(cls.__init__).parameters
+        name_type_default = []
+        for arg in datamodule_default_params:
+            arg_type = datamodule_default_params[arg].annotation
+            arg_default = datamodule_default_params[arg].default
+            try:
+                arg_types = tuple(arg_type.__args__)
+            except AttributeError:
+                arg_types = (arg_type,)
+
+            name_type_default.append((arg, arg_types, arg_default))
+
+        return name_type_default
 
     def configure_optimizers(self):
         d_optim = Adam(self.discriminator.parameters(),
                        lr=self.hparams.learning_rate,
-                       betas=(self.hparams.b1, self.hparams.b2))
+                       betas=(self.hparams.optim_b1, self.hparams.optim_b2))
         g_optim = Adam(self.parameters(),
                        lr=self.hparams.learning_rate,
-                       betas=(self.hparams.b1, self.hparams.b2))
+                       betas=(self.hparams.optim_b1, self.hparams.optim_b2))
         if self.hparams.lr_scheduler:
             d_scheduler = StepLR(d_optim, step_size=self.hparams.lr_stepsize,
                                  gamma=self.hparams.lr_gamma)

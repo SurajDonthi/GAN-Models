@@ -4,7 +4,8 @@ from argparse import ArgumentParser
 from pathlib2 import Path
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
-from pytorch_lightning.loggers import TensorBoardLogger, TestTubeLogger
+from pytorch_lightning.loggers import TestTubeLogger
+import torch
 from torch.utils.data import ConcatDataset, DataLoader
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST, FashionMNIST
@@ -36,6 +37,7 @@ def main(args):
                                      #  save_top_k=1
                                      )
 
+    ######################## D A T A  L O A D I N G ########################
     # data_loader = CustomDataLoader.from_argparse_args(args)
     transform = transforms.Compose([
         transforms.ToTensor(),
@@ -48,8 +50,10 @@ def main(args):
     data_loader = DataLoader(train, args.train_batchsize,
                              shuffle=True, num_workers=args.num_workers,
                              pin_memory=True)
-    # out_dim -> torch.prod(torch.tensor(transforms.ToTensor()(train[0][0]).shape))
-    model = Engine(learning_rate=args.learning_rate)
+    out_dim = int(torch.prod(torch.tensor(train[0][0].shape)))
+    ########################################################################
+
+    model = Engine.from_argparse_args(args, out_dim=out_dim)
 
     save_args(args, log_dir)
 
@@ -66,7 +70,8 @@ if __name__ == "__main__":
     parser = ArgumentParser()
 
     parser = CustomDataLoader.add_argparse_args(parser)
-    parser = Engine.add_model_specific_args(parser)
+    parser = Engine.add_argparse_args(parser)
+    parser = Engine.add_additional_args(parser)
     parser = Trainer.add_argparse_args(parser)
     args = parser.parse_args()
 
