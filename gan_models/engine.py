@@ -230,29 +230,26 @@ class Engine(pl.LightningModule):
         X, _ = batch
         self.shape = tuple(X.shape)
         X = torch.flatten(X, start_dim=1)
+
         if optimizer_idx == 0 and batch_idx % self.hparams.d_skip_batch == 0:
-            self.loss = self.discriminator_loss(X)        # , acc
-            self.logs = {"Loss/d_loss": self.loss,
-                         # "Accuracy/d_acc": acc
-                         }
+            loss = self.discriminator_loss(X)        # , acc
+            logs = {"Loss/d_loss": loss,
+                    # "Accuracy/d_acc": acc
+                    }
+            self.log_dict(logs, prog_bar=True,
+                          on_step=True, on_epoch=True)
+
+            return loss
 
         if optimizer_idx == 1 and batch_idx % self.hparams.g_skip_batch == 0:
-            self.loss = self.generator_loss(X)        # , acc
-            self.logs = {"Loss/g_loss": self.loss,
-                         # "Accuracy/g_acc": acc
-                         }
+            loss = self.generator_loss(X)        # , acc
+            logs = {"Loss/g_loss": loss,
+                    # "Accuracy/g_acc": acc
+                    }
+            self.log_dict(logs, prog_bar=True,
+                          on_step=True, on_epoch=True)
 
-        self.log_dict(self.logs, prog_bar=True, on_step=True, on_epoch=True)
-
-        return self.loss
-
-    def backward(self, loss: torch.Tensor, optimizer: Optimizer, optimizer_idx: int, *args, **kwargs) -> None:
-        if optimizer_idx == 0 and \
-                self.trainer.batch_idx % self.hparams.d_skip_batch == 0:
-            loss.backward(*args, **kwargs)
-        if optimizer_idx == 1 and \
-                self.trainer.batch_idx % self.hparams.g_skip_batch == 0:
-            loss.backward(*args, **kwargs)
+            return loss
 
     def on_train_epoch_end(self, outputs) -> None:
 
