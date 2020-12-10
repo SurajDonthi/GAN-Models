@@ -1,5 +1,5 @@
 {
-  "python.pythonPath": "C:\\Users\\suraj\\Miniconda3\\envs\\PytorchEnv\\python.exe",
+  "python.pythonPath": "/home/ubuntu/anaconda3/envs/PytorchEnv/bin/python",
   "python.linting.pylintEnabled": false,
   "python.linting.flake8Enabled": true,
   "python.linting.enabled": true,
