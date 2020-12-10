@@ -54,10 +54,12 @@
         "False",
         "--debug",
         "False",
+        "--d_skip_batch",
+        "3",
         "--limit_train_batches",
         "0.05",
         "--max_epochs",
-        "2",
+        "10",
         "--profiler",
         "True"
       ]

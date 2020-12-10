@@ -7,7 +7,7 @@ import torch
 import torch.nn.functional as F
 from pytorch_lightning.metrics.functional import accuracy
 from pytorch_lightning.utilities import parsing
-from torch.optim import Adam
+from torch.optim import Adam, Optimizer
 from torch.optim.lr_scheduler import StepLR
 from torchvision.utils import make_grid
 
@@ -28,7 +28,6 @@ LOSSES = {'bce': F.binary_cross_entropy,
 
 class Engine(pl.LightningModule):
 
-    # TODO: Provide the `out_dim` from the dataset!
     # TODO: Add kwargs for several other arguments
     # TODO: Provide access to Generator & Discriminator Layers as model args
 
@@ -232,19 +231,28 @@ class Engine(pl.LightningModule):
         self.shape = tuple(X.shape)
         X = torch.flatten(X, start_dim=1)
         if optimizer_idx == 0 and batch_idx % self.hparams.d_skip_batch == 0:
-            loss = self.discriminator_loss(X)        # , acc
-            logs = {"Loss/d_loss": loss,
-                    # "Accuracy/d_acc": acc
-                    }
-            self.log_dict(logs, prog_bar=True, on_step=True, on_epoch=True)
-        if optimizer_idx == 1 and batch_idx % self.hparams.g_skip_batch == 0:
-            loss = self.generator_loss(X)        # , acc
-            logs = {"Loss/g_loss": loss,
-                    # "Accuracy/g_acc": acc
-                    }
-            self.log_dict(logs, prog_bar=True, on_step=True, on_epoch=True)
+            self.loss = self.discriminator_loss(X)        # , acc
+            self.logs = {"Loss/d_loss": self.loss,
+                         # "Accuracy/d_acc": acc
+                         }
 
-        # return loss
+        if optimizer_idx == 1 and batch_idx % self.hparams.g_skip_batch == 0:
+            self.loss = self.generator_loss(X)        # , acc
+            self.logs = {"Loss/g_loss": self.loss,
+                         # "Accuracy/g_acc": acc
+                         }
+
+        self.log_dict(self.logs, prog_bar=True, on_step=True, on_epoch=True)
+
+        return self.loss
+
+    def backward(self, loss: torch.Tensor, optimizer: Optimizer, optimizer_idx: int, *args, **kwargs) -> None:
+        if optimizer_idx == 0 and \
+                self.trainer.batch_idx % self.hparams.d_skip_batch == 0:
+            loss.backward(*args, **kwargs)
+        if optimizer_idx == 1 and \
+                self.trainer.batch_idx % self.hparams.g_skip_batch == 0:
+            loss.backward(*args, **kwargs)
 
     def on_train_epoch_end(self, outputs) -> None:
 
@@ -252,3 +260,9 @@ class Engine(pl.LightningModule):
             'Generated Images', make_grid(self.X_hat.reshape(self.shape)),
             self.current_epoch
         )
+
+    def get_progress_bar_dict(self):
+        # don't show the version number
+        items = super().get_progress_bar_dict()
+        items.pop("v_num", None)
+        return items
