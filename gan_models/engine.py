@@ -236,15 +236,15 @@ class Engine(pl.LightningModule):
             logs = {"Loss/d_loss": loss,
                     # "Accuracy/d_acc": acc
                     }
+            self.log_dict(logs, prog_bar=True, on_step=True, on_epoch=True)
         if optimizer_idx == 1 and batch_idx % self.hparams.g_skip_batch == 0:
             loss = self.generator_loss(X)        # , acc
             logs = {"Loss/g_loss": loss,
                     # "Accuracy/g_acc": acc
                     }
+            self.log_dict(logs, prog_bar=True, on_step=True, on_epoch=True)
 
-        self.log_dict(logs, prog_bar=True, on_step=True, on_epoch=True)
-
-        return loss
+        # return loss
 
     def on_train_epoch_end(self, outputs) -> None:
 
