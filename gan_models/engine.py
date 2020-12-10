@@ -37,6 +37,7 @@ class Engine(pl.LightningModule):
                  criterion: Literal[tuple(LOSSES.keys())] = 'bce',
                  learning_rate: float = 0.0001,
                  # TODO: For Optimizers & Schedulers -> Take input as dictionary for various arguments to be passed to them
+                 d_skip_batch: int = 1, g_skip_batch: int = 1,
                  optim_b1: float = 0.9,
                  optim_b2: float = 0.999,
                  lr_scheduler: bool = False,
@@ -230,12 +231,12 @@ class Engine(pl.LightningModule):
         X, _ = batch
         self.shape = tuple(X.shape)
         X = torch.flatten(X, start_dim=1)
-        if optimizer_idx == 0:
+        if optimizer_idx == 0 and batch_idx % self.hparams.d_skip_batch == 0:
             loss = self.discriminator_loss(X)        # , acc
             logs = {"Loss/d_loss": loss,
                     # "Accuracy/d_acc": acc
                     }
-        if optimizer_idx == 1:
+        if optimizer_idx == 1 and batch_idx % self.hparams.g_skip_batch == 0:
             loss = self.generator_loss(X)        # , acc
             logs = {"Loss/g_loss": loss,
                     # "Accuracy/g_acc": acc
