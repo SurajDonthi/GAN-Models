@@ -57,7 +57,9 @@
         "--limit_train_batches",
         "0.05",
         "--max_epochs",
-        "2"
+        "2",
+        "--profiler",
+        "True"
       ]
     }
   ]

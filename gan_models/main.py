@@ -38,6 +38,7 @@ def main(args):
                                      )
 
     ######################## D A T A  L O A D I N G ########################
+    # TODO: Move code to pl.DataModule to dynamically load any Pytorch dataset + other custom DataModules
     # data_loader = CustomDataLoader.from_argparse_args(args)
     transform = transforms.Compose([
         transforms.ToTensor(),
