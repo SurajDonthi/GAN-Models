@@ -19,7 +19,8 @@ def main(args):
     tt_logger = TestTubeLogger(save_dir=args.log_path, name="",
                                debug=args.debug,
                                description=args.description,
-                               create_git_tag=args.git_tag
+                               create_git_tag=args.git_tag,
+                               log_graph=True
                                )
     tt_logger.experiment
 

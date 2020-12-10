@@ -36,7 +36,7 @@ class Engine(pl.LightningModule):
                  model: Literal[tuple(MODELS.keys())] = 'gan',
                  criterion: Literal[tuple(LOSSES.keys())] = 'bce',
                  learning_rate: float = 0.0001,
-                 #  TODO: For Optimizers & Schedulers -> Take input as dictionary for various arguments to be passed to them
+                 # TODO: For Optimizers & Schedulers -> Take input as dictionary for various arguments to be passed to them
                  optim_b1: float = 0.9,
                  optim_b2: float = 0.999,
                  lr_scheduler: bool = False,
