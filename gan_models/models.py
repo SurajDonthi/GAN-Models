@@ -35,7 +35,7 @@ class Generator(nn.Module):
             linear = getattr(self, name)
             X = linear(X)
 
-        return X
+        return F.tanh(X)
 
 
 class Discriminator(nn.Module):
