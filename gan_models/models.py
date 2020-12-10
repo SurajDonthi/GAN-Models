@@ -1,49 +1,71 @@
-import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
 class Generator(nn.Module):
-    def __init__(self, latent_dim, out_dim):
+    def __init__(self, out_dim: int, latent_dim: int = 100,
+                 normalize: bool = False,
+                 hidden_layers: list = [128, 256, 512, 1024]):
         super().__init__()
-        self.layers(latent_dim, out_dim)
+        self.latent_dim = latent_dim
+        self.out_dim = out_dim
+        self.hidden_layers = hidden_layers
+        self.layers = [latent_dim] + self.hidden_layers + [out_dim]
+        self.normalize = normalize
+        self._model_generator()
 
-    def layers(self, latent_dim, out_dim):
-        self.fc1 = nn.Linear(latent_dim, 256)
-        self.fc2 = nn.Linear(256, 512)
-        self.fc3 = nn.Linear(512, 1024)
-        self.fc4 = nn.Linear(1024, out_dim)
+    def _model_generator(self):
+        input_dim = self.layers[0]
+        for i, dim in enumerate(self.layers[1:]):
+            name = f'linear{i}'
+            layer = self.linear_block(input_dim, dim)
+            setattr(self, name, nn.Sequential(*layer))
+            input_dim = dim
+
+    def linear_block(self, input_feat, out_feat):
+        layers = [nn.Linear(input_feat, out_feat)]
+        if self.normalize:
+            layers.append(nn.BatchNorm1d(out_feat, eps=0.8))
+        layers.append(nn.LeakyReLU(0.02, inplace=True))
+        return layers
 
     def forward(self, X):
-        X = F.leaky_relu(self.fc1(X), 0.2)
-        X = F.leaky_relu(self.fc2(X), 0.2)
-        X = F.leaky_relu(self.fc3(X), 0.2)
-        X = torch.tanh(self.fc4(X))
+        for i, _ in enumerate(self.layers[1:]):
+            name = f'linear{i}'
+            linear = getattr(self, name)
+            X = linear(X)
 
         return X
 
 
 class Discriminator(nn.Module):
-    def __init__(self, input_dim):
+    def __init__(self, input_dim, hidden_layers=[512, 256]):
         super().__init__()
         self.input_dim = input_dim
-        self.layers()
+        self.hidden_layers = hidden_layers
+        self.layers = [input_dim] + self.hidden_layers + [1]
+        self._model_generator()
 
-    def layers(self):
-        self.fc1 = nn.Linear(self.input_dim, 1024)
-        self.fc2 = nn.Linear(1024, 512)
-        self.fc3 = nn.Linear(512, 256)
-        self.fc4 = nn.Linear(256, 1)
+    def _model_generator(self):
+        input_dim = self.input_dim
+        for i, dim in enumerate(self.layers[1:]):
+            name = f'linear{i}'
+            layer = self.linear_block(input_dim, dim)
+            setattr(self, name, nn.Sequential(*layer))
+            input_dim = dim
+
+    def linear_block(self, input_feat, out_feat):
+        layers = [nn.Linear(input_feat, out_feat)]
+        layers.append(nn.LeakyReLU(0.02, inplace=True))
+        return layers
 
     def forward(self, X):
-        X = X.view(X.size(0), self.input_dim)
-        X = F.leaky_relu(self.fc1(X), 0.2)
-        X = F.dropout(X, 0.3)
-        X = F.leaky_relu(self.fc2(X), 0.2)
-        X = F.dropout(X, 0.3)
-        X = F.leaky_relu(self.fc3(X), 0.2)
-        X = F.dropout(X, 0.3)
-        X = torch.sigmoid(self.fc4(X))
+        for i, _ in enumerate(self.layers[1:]):
+            name = f'linear{i}'
+            linear = getattr(self, name)
+            X = linear(X)
+        X = F.sigmoid(X)
+
         return X
 
 
@@ -53,7 +75,7 @@ class GAN:
         self.generator = Generator
 
 
-# ToDo: Implement the below models with similar interface!
+# TODO: Implement the below models with similar interface!
 
 
 class FMGAN:

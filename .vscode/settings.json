@@ -3,5 +3,7 @@
   "python.linting.pylintEnabled": false,
   "python.linting.flake8Enabled": true,
   "python.linting.enabled": true,
-  "python.envFile": "${workspaceFolder}/.vscode/.env"
+  "python.envFile": "${workspaceFolder}/.vscode/.env",
+  "todo-tree.tree.showBadges": false,
+  "todo-tree.tree.showCountsInTree": true
 }

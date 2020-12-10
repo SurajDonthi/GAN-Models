@@ -28,12 +28,15 @@ LOSSES = {'bce': F.binary_cross_entropy,
 
 class Engine(pl.LightningModule):
 
-    # ToDo: Provide the `out_dim` from the dataset!
-    def __init__(self, out_dim: int, latent_dim: int = 10,
+    # TODO: Provide the `out_dim` from the dataset!
+    # TODO: Add kwargs for several other arguments
+    # TODO: Provide access to Generator & Discriminator Layers as model args
+
+    def __init__(self, out_dim: int, latent_dim: int = 100,
                  model: Literal[tuple(MODELS.keys())] = 'gan',
                  criterion: Literal[tuple(LOSSES.keys())] = 'bce',
                  learning_rate: float = 0.0001,
-                 #  Todo: For Optimizers & Schedulers -> Take input as dictionary for various arguments to be passed to them
+                 #  TODO: For Optimizers & Schedulers -> Take input as dictionary for various arguments to be passed to them
                  optim_b1: float = 0.9,
                  optim_b2: float = 0.999,
                  lr_scheduler: bool = False,
@@ -43,8 +46,8 @@ class Engine(pl.LightningModule):
         self.save_hyperparameters()
         self.criterion = LOSSES[criterion]
         self.model = MODELS[model]
-        self.discriminator = self.model.discriminator(out_dim)
-        self.generator = self.model.generator(latent_dim, out_dim)
+        self.discriminator = self.model.discriminator(input_dim=out_dim)
+        self.generator = self.model.generator(out_dim, latent_dim)
 
     @staticmethod
     def add_additional_args(parent_parser):
@@ -71,7 +74,6 @@ class Engine(pl.LightningModule):
 
         allowed_types = (str, int, float, bool)
 
-        # TODO: get "help" from docstring :)
         for arg, arg_types, arg_default in (
             at
             for at in cls.get_init_arguments_and_types()
