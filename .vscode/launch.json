@@ -48,6 +48,8 @@
         "Testing the model initially",
         "--weights_summary",
         "full",
+        // "--train_batchsize",
+        // "64",
         "--gpus",
         "1",
         "--git_tag",

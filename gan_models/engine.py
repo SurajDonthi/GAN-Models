@@ -34,10 +34,10 @@ class Engine(pl.LightningModule):
     def __init__(self, out_dim: int, latent_dim: int = 100,
                  model: Literal[tuple(MODELS.keys())] = 'gan',
                  criterion: Literal[tuple(LOSSES.keys())] = 'bce',
-                 learning_rate: float = 0.0001,
+                 learning_rate: float = 0.0002,
                  # TODO: For Optimizers & Schedulers -> Take input as dictionary for various arguments to be passed to them
                  d_skip_batch: int = 1, g_skip_batch: int = 1,
-                 optim_b1: float = 0.9,
+                 optim_b1: float = 0.5,
                  optim_b2: float = 0.999,
                  lr_scheduler: bool = False,
                  lr_stepsize: int = 100, lr_gamma: float = 0.1):
@@ -173,19 +173,20 @@ class Engine(pl.LightningModule):
         return name_type_default
 
     def configure_optimizers(self):
+        g_optim = Adam(self.generator.parameters(),
+                       lr=self.hparams.learning_rate,
+                       betas=(self.hparams.optim_b1, self.hparams.optim_b2))
         d_optim = Adam(self.discriminator.parameters(),
                        lr=self.hparams.learning_rate,
                        betas=(self.hparams.optim_b1, self.hparams.optim_b2))
-        g_optim = Adam(self.parameters(),
-                       lr=self.hparams.learning_rate,
-                       betas=(self.hparams.optim_b1, self.hparams.optim_b2))
+
         if self.hparams.lr_scheduler:
-            d_scheduler = StepLR(d_optim, step_size=self.hparams.lr_stepsize,
-                                 gamma=self.hparams.lr_gamma)
             g_scheduler = StepLR(g_optim, step_size=self.hparams.lr_stepsize,
                                  gamma=self.hparams.lr_gamma)
-            return [d_optim, g_optim], [d_scheduler, g_scheduler]
-        return [d_optim, g_optim]
+            d_scheduler = StepLR(d_optim, step_size=self.hparams.lr_stepsize,
+                                 gamma=self.hparams.lr_gamma)
+            return [g_optim, d_optim], [g_scheduler, d_scheduler]
+        return [g_optim, d_optim]
 
     def forward(self, X):
         return self.generator(X)
@@ -208,7 +209,7 @@ class Engine(pl.LightningModule):
         fake_loss = self.criterion(y_hat, y)
         # fake_acc = accuracy(torch.round(y_hat), y, num_classes=2)
 
-        d_loss = real_loss + fake_loss
+        d_loss = (real_loss + fake_loss) / 2
 
         # acc = real_acc + fake_acc
 
@@ -220,7 +221,7 @@ class Engine(pl.LightningModule):
             X.shape[0], self.hparams.latent_dim, device=self.device)
         self.X_hat = self(latent_vector)
         y_hat = self.discriminator(self.X_hat)
-        y = torch.ones_like(y_hat)
+        y = torch.ones_like(y_hat, requires_grad=False)
         g_loss = self.criterion(y_hat, y)
         # acc = accuracy(torch.round(y_hat), y, num_classes=2)
 
@@ -231,20 +232,20 @@ class Engine(pl.LightningModule):
         self.shape = tuple(X.shape)
         X = torch.flatten(X, start_dim=1)
 
-        if optimizer_idx == 0 and batch_idx % self.hparams.d_skip_batch == 0:
-            loss = self.discriminator_loss(X)        # , acc
-            logs = {"Loss/d_loss": loss,
-                    # "Accuracy/d_acc": acc
+        if optimizer_idx == 0 and batch_idx % self.hparams.g_skip_batch == 0:
+            loss = self.generator_loss(X)        # , acc
+            logs = {"Loss/g_loss": loss,
+                    # "Accuracy/g_acc": acc
                     }
             self.log_dict(logs, prog_bar=True,
                           on_step=True, on_epoch=True)
 
             return loss
 
-        if optimizer_idx == 1 and batch_idx % self.hparams.g_skip_batch == 0:
-            loss = self.generator_loss(X)        # , acc
-            logs = {"Loss/g_loss": loss,
-                    # "Accuracy/g_acc": acc
+        if optimizer_idx == 1 and batch_idx % self.hparams.d_skip_batch == 0:
+            loss = self.discriminator_loss(X)        # , acc
+            logs = {"Loss/d_loss": loss,
+                    # "Accuracy/d_acc": acc
                     }
             self.log_dict(logs, prog_bar=True,
                           on_step=True, on_epoch=True)
