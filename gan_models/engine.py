@@ -4,7 +4,7 @@ from typing import Any, List, Optional, Tuple, Union, Literal
 import json
 
 import pytorch_lightning as pl
-import torch
+import torch as th
 import torch.nn.functional as F
 from pytorch_lightning.metrics.functional import accuracy
 from pytorch_lightning.utilities import parsing
@@ -17,8 +17,8 @@ from models import GAN
 from utils import filtered_kwargs
 
 MODELS = {
-    'gan': GAN(),
-    'vanilla_gan': GAN()
+    'gan': GAN,
+    'vanilla_gan': GAN
 }
 
 OPTIMIZERS = {
@@ -46,7 +46,7 @@ class Engine(pl.LightningModule):
                  optimizer_options: Optional[dict] = {
                      'optim': 'Adam', 'args': {'betas': (0.5, 0.999)}},
                  scheduler_options: Optional[dict] = None,
-                 model_options: dict = {
+                 model_args: dict = {
                      'discriminator': {'hidden_layers': [512, 256]},
                      'generator': {'hidden_layers': [128, 256, 512, 1024]}}
                  ):
@@ -54,15 +54,14 @@ class Engine(pl.LightningModule):
         super().__init__()
 
         self.save_hyperparameters()
-        self.criterion = LOSSES[criterion]
-        self.model = MODELS[model]
-        self.D = self.model.discriminator(
-            input_dim=out_dim, **model_options['discriminator'])
-        self.G = self.model.generator(
-            out_dim, latent_dim, **model_options['generator'])
+        self._criterion = LOSSES[criterion]
+        self._optimizer_options = optimizer_options
+        self._scheduler_options = scheduler_options
 
-        self.optimizer_options = optimizer_options
-        self.scheduler_options = scheduler_options
+        self.model = MODELS[model](
+            latent_dim, out_dim, self._criterion, model_args)
+        self.G, self.D = self.model.G, self.model.D
+        self.G_loss, self.D_loss = self.model.G_loss, self.model.D_loss
 
     @staticmethod
     def add_additional_args(parent_parser):
@@ -191,62 +190,28 @@ class Engine(pl.LightningModule):
 
     def configure_optimizers(self):
         g_optim = Adam(self.G.parameters(),
-                       lr=self.hparams.learning_rate, **self.optimizer_options['args'])
+                       lr=self.hparams.learning_rate,
+                       **self._optimizer_options['args'])
         d_optim = Adam(self.D.parameters(),
-                       lr=self.hparams.learning_rate, **self.optimizer_options['args'])
+                       lr=self.hparams.learning_rate,
+                       **self._optimizer_options['args'])
 
-        if self.scheduler_options:
-            g_scheduler = StepLR(g_optim, **self.scheduler_options['args'])
-            d_scheduler = StepLR(d_optim, **self.scheduler_options['args'])
+        if self._scheduler_options:
+            g_scheduler = StepLR(g_optim, **self._scheduler_options['args'])
+            d_scheduler = StepLR(d_optim, **self._scheduler_options['args'])
             return [g_optim, d_optim], [g_scheduler, d_scheduler]
         return [g_optim, d_optim]
 
     def forward(self, X):
         return self.G(X)
 
-    def discriminator_loss(self, real):
-        # Real Loss
-        # Here y_hat -> Prediction whether real or fake
-        y_hat = self.D(real)
-        y = torch.ones_like(y_hat)
-        real_loss = self.criterion(y_hat, y)
-
-        # real_acc = accuracy(torch.round(y_hat), y)
-
-        # Fake_loss
-        latent_vector = torch.randn(
-            real.shape[0], self.hparams.latent_dim, device=self.device)
-        self.fake = self(latent_vector)
-        y_hat = self.D(self.fake)
-        y = torch.zeros_like(y_hat)
-        fake_loss = self.criterion(y_hat, y)
-        # fake_acc = accuracy(torch.round(y_hat), y, num_classes=2)
-
-        d_loss = (real_loss + fake_loss) / 2
-
-        # acc = real_acc + fake_acc
-
-        return d_loss   # , acc
-
-    def generator_loss(self, real):
-        # Fake Loss
-        latent_vector = torch.randn(
-            real.shape[0], self.hparams.latent_dim, device=self.device)
-        self.fake = self(latent_vector)
-        y_hat = self.D(self.fake)
-        y = torch.ones_like(y_hat, requires_grad=False)
-        g_loss = self.criterion(y_hat, y)
-        # acc = accuracy(torch.round(y_hat), y, num_classes=2)
-
-        return g_loss  # , acc
+    def on_fit_start(self):
+        self.model._init_device(self.device)
 
     def training_step(self, batch, batch_idx, optimizer_idx):
-        real, _ = batch
-        self.shape = tuple(real.shape)
-        real = torch.flatten(real, start_dim=1)
 
         if optimizer_idx == 0 and batch_idx % self.hparams.g_skip_batch == 0:
-            loss = self.generator_loss(real)        # , acc
+            loss = self.G_loss(batch)        # , acc
             logs = {"Loss/g_loss": loss,
                     # "Accuracy/g_acc": acc
                     }
@@ -256,7 +221,7 @@ class Engine(pl.LightningModule):
             return loss
 
         if optimizer_idx == 1 and batch_idx % self.hparams.d_skip_batch == 0:
-            loss = self.discriminator_loss(real)        # , acc
+            loss = self.D_loss(batch)        # , acc
             logs = {"Loss/d_loss": loss,
                     # "Accuracy/d_acc": acc
                     }
@@ -268,7 +233,7 @@ class Engine(pl.LightningModule):
     def on_train_epoch_end(self, outputs) -> None:
 
         self.logger.experiment.add_image(
-            'Generated Images', make_grid(self.fake.reshape(self.shape)),
+            'Generated Images', make_grid(self.model.gen_imgs),
             self.current_epoch
         )
 

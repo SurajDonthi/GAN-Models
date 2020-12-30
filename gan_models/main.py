@@ -40,7 +40,7 @@ def main(args):
 
     data_loader = PytorchDataLoader.from_argparse_args(args)
 
-    img_shape = th.prod(th.tensor(data_loader.train_data[0][0].shape)).item()
+    img_shape = data_loader.train_data[0][0].shape
 
     model = Engine.from_argparse_args(args, out_dim=img_shape)
 
