@@ -6,17 +6,17 @@ from utils import filtered_kwargs
 
 
 class Generator(nn.Module):
-    def __init__(self, out_dim: int, latent_dim: int = 100,
+    def __init__(self, img_shape: int, latent_dim: int = 100,
                  #  normalize: bool = False,
                  hidden_layers: list = [128, 256, 512, 1024]):
         super().__init__()
         self.latent_dim = latent_dim
-        self.out_dim = th.prod(th.tensor(out_dim)).item()
-        self._original_out_dim = out_dim
+        self.img_shape = img_shape
+        self.flattened_img_shape = th.prod(th.tensor(img_shape)).item()
         self.hidden_layers = hidden_layers
 
         self.layers = [latent_dim] + \
-            self.hidden_layers + [self.out_dim]
+            self.hidden_layers + [self.flattened_img_shape]
         # self.normalize = normalize
         self._model_generator()
 
@@ -33,7 +33,7 @@ class Generator(nn.Module):
             input_dim = dim
 
         self.final = nn.Sequential(
-            nn.Linear(self.hidden_layers[-1], self.out_dim),
+            nn.Linear(self.hidden_layers[-1], self.flattened_img_shape),
             nn.Tanh()
         )
 
@@ -52,19 +52,20 @@ class Generator(nn.Module):
 
         X = self.final(X)
 
-        return X.view(-1, *self._original_out_dim)
+        return X.view(-1, *self.img_shape)
 
 
 class Discriminator(nn.Module):
-    def __init__(self, input_dim, hidden_layers=[512, 256]):
+    def __init__(self, img_shape, hidden_layers=[512, 256]):
         super().__init__()
-        self.input_dim = th.prod(th.tensor(input_dim)).item()
+        self.img_shape = img_shape
+        self.flattened_img_shape = th.prod(th.tensor(img_shape)).item()
         self.hidden_layers = hidden_layers
-        self.layers = [self.input_dim] + self.hidden_layers + [1]
+        self.layers = [self.flattened_img_shape] + self.hidden_layers + [1]
         self._model_generator()
 
     def _model_generator(self):
-        input_dim = self.input_dim
+        input_dim = self.flattened_img_shape
         for i, dim in enumerate(self.hidden_layers):
             name = f'linear{i}'
             layer = self.linear_block(input_dim, dim)
@@ -93,15 +94,15 @@ class Discriminator(nn.Module):
 
 
 class GAN:
-    def __init__(self, latent_dim, out_dim, criterion, model_args=None):
+    def __init__(self, latent_dim, img_shape, criterion, model_args=None):
 
         self.latent_dim = latent_dim
-        self.out_dim = out_dim
+        self.img_shape = img_shape
         self.criterion = criterion
 
-        self.D = Discriminator(input_dim=out_dim, **
+        self.D = Discriminator(img_shape=img_shape, **
                                model_args['discriminator'])
-        self.G = Generator(out_dim, latent_dim, ** model_args['generator'])
+        self.G = Generator(img_shape, latent_dim, ** model_args['generator'])
 
     # Make the below two functions independent of the class
 
