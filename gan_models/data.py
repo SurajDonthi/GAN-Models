@@ -1,15 +1,16 @@
 import pytorch_lightning as pl
-from torch.utils.data import Dataset, DataLoader
+from pathlib2 import Path
+from torch.utils.data import DataLoader, Dataset
+from torchvision.datasets import CIFAR10, MNIST, Caltech101, FashionMNIST
+from torchvision.transforms import transforms
 
-# * Not required to implement DataLoader for all datasets.
-# * Use it only when there is quiet a lot of pre-processing to do.
-# * Else Dataset is sufficient.
+from utils import filtered_kwargs
 
 
-class Dataset(Dataset):
+class SampleDataset(Dataset):
 
     def __init__(self):
-        super(Dataset, self).__init__()
+        super(SampleDataset, self).__init__()
 
     def __len__(self):
         return len(None)
@@ -19,58 +20,73 @@ class Dataset(Dataset):
         return sample
 
 
-class CustomDataLoader(pl.LightningDataModule):
+DATASETS = {
+    'mnist': MNIST,
+    'fashion-mnist': FashionMNIST,
+    'caltech101': Caltech101,
+    'cifar10': CIFAR10,
+}
+MEAN_N_STD = {
+    'mnist': {'mean': (0.1307,), 'std': (0.3081,)},
+    'fasion-mnist': {'mean': (0.5,), 'std': (0.5,)},
+    'caltech101': {'mean': (0.485, 0.456, 0.406), 'std': (0.229, 0.224, 0.225)},
+    'cifar10': {'mean': (0.4914, 0.4822, 0.4465), 'std': (0.2023, 0.1994, 0.2010)}
+}
+
+
+class PytorchDataLoader(pl.LightningDataModule):
 
     def __init__(self, data_dir: str,
+                 dataset: str = 'mnist',
+                 train: bool = True,
+                 download: bool = False,
                  train_batchsize: int = 32,
-                 val_batchsize: int = 32,
-                 test_batchsize: int = 32,
                  num_workers: int = 4,
-                 train_transforms=None,
-                 val_transforms=None,
-                 test_transforms=None):
+                 ):
 
         super().__init__()
 
-        self.data_dir = data_dir
+        self.data_dir = Path(data_dir)
 
         if not self.data_dir.exists():
             raise Exception(
-                f"'Path '{self.data_dir.__str__()}' does not exist!")
+                f"'Path '{str(self.data_dir)}' does not exist!")
         if not self.data_dir.is_dir():
             raise Exception(
-                f"Path '{self.data_dir.__str__()}' is not a directory!")
+                f"Path '{str(self.data_dir)}' is not a directory!")
+
+        self.dataset = dataset
+        self.train = train
+        self.download = download
 
         self.train_batchsize = train_batchsize
-        self.test_batchsize = test_batchsize
-        self.val_batchsize = val_batchsize
 
         self.num_workers = num_workers
-
-        self.train_transforms = train_transforms
-        self.val_transforms = val_transforms
-        self.test_transforms = test_transforms
+        self.prepare_data()
 
     def prepare_data(self):
-        pass
 
-    def setup(self, stage=None):
-        return super().setup(stage=stage)
+        self.train_transforms = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize(**MEAN_N_STD[self.dataset])
+        ])
+
+        if self.dataset == 'caltech101':
+            self.train_data = DATASETS[self.dataset](
+                root=self.data_dir,
+                target_type='category',
+                transform=self.train_transforms,
+                download=self.download,
+            )
+        else:
+            self.train_data = DATASETS[self.dataset](
+                root=self.data_dir,
+                train=self.train,
+                transform=self.train_transforms,
+                download=self.download,
+            )
 
     def train_dataloader(self):
-        dataset = Dataset()
-        # ToDo: Remove hardcoding
-        return DataLoader(dataset, batch_size=self.train_batchsize,
-                          shuffle=True, num_workers=self.num_workers)
 
-    def val_dataloader(self):
-        dataset = Dataset()
-        # ToDo: Remove hardcoding
-        return DataLoader(dataset, batch_size=self.train_batchsize,
-                          shuffle=True, num_workers=self.num_workers)
-
-    def test_dataloader(self):
-        dataset = Dataset()
-        # ToDo: Remove hardcoding
-        return DataLoader(dataset, batch_size=self.train_batchsize,
+        return DataLoader(self.train_data, batch_size=self.train_batchsize,
                           shuffle=True, num_workers=self.num_workers)

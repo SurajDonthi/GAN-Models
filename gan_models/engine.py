@@ -1,53 +1,68 @@
 import inspect
 from argparse import ArgumentParser, Namespace
 from typing import Any, List, Optional, Tuple, Union, Literal
+import json
 
 import pytorch_lightning as pl
 import torch
 import torch.nn.functional as F
 from pytorch_lightning.metrics.functional import accuracy
 from pytorch_lightning.utilities import parsing
-from torch.optim import Adam, Optimizer
+from torch.optim import RMSprop, SGD, Adam
 from torch.optim.lr_scheduler import StepLR
 from torchvision.utils import make_grid
 
 # import all GAN models here.
 from models import GAN
+from utils import filtered_kwargs
 
 MODELS = {
     'gan': GAN(),
     'vanilla_gan': GAN()
 }
 
-LOSSES = {'bce': F.binary_cross_entropy,
-          'bce_logits': F.binary_cross_entropy_with_logits,
-          'cross_entropy': F.cross_entropy, 'nll_loss': F.nll_loss,
-          'kl_div': F.kl_div, 'mse': F.mse_loss,
-          'l1_loss': F.l1_loss}
+OPTIMIZERS = {
+    'sgd': SGD,
+    'adam': Adam,
+    'rmsprop': RMSprop
+}
+
+LOSSES = {
+    'bce': F.binary_cross_entropy,
+    'bce_logits': F.binary_cross_entropy_with_logits,
+    'cross_entropy': F.cross_entropy, 'nll_loss': F.nll_loss,
+    'kl_div': F.kl_div, 'mse': F.mse_loss,
+    'l1_loss': F.l1_loss
+}
 
 
 class Engine(pl.LightningModule):
-
-    # TODO: Add kwargs for several other arguments
-    # TODO: Provide access to Generator & Discriminator Layers as model args
 
     def __init__(self, out_dim: int, latent_dim: int = 100,
                  model: Literal[tuple(MODELS.keys())] = 'gan',
                  criterion: Literal[tuple(LOSSES.keys())] = 'bce',
                  learning_rate: float = 0.0002,
-                 # TODO: For Optimizers & Schedulers -> Take input as dictionary for various arguments to be passed to them
                  d_skip_batch: int = 1, g_skip_batch: int = 1,
-                 optim_b1: float = 0.5,
-                 optim_b2: float = 0.999,
-                 lr_scheduler: bool = False,
-                 lr_stepsize: int = 100, lr_gamma: float = 0.1):
+                 optimizer_options: Optional[dict] = {
+                     'optim': 'Adam', 'args': {'betas': (0.5, 0.999)}},
+                 scheduler_options: Optional[dict] = None,
+                 model_options: dict = {
+                     'discriminator': {'hidden_layers': [512, 256]},
+                     'generator': {'hidden_layers': [128, 256, 512, 1024]}}
+                 ):
+
         super().__init__()
 
         self.save_hyperparameters()
         self.criterion = LOSSES[criterion]
         self.model = MODELS[model]
-        self.discriminator = self.model.discriminator(input_dim=out_dim)
-        self.generator = self.model.generator(out_dim, latent_dim)
+        self.D = self.model.discriminator(
+            input_dim=out_dim, **model_options['discriminator'])
+        self.G = self.model.generator(
+            out_dim, latent_dim, **model_options['generator'])
+
+        self.optimizer_options = optimizer_options
+        self.scheduler_options = scheduler_options
 
     @staticmethod
     def add_additional_args(parent_parser):
@@ -72,7 +87,7 @@ class Engine(pl.LightningModule):
         depr_arg_names = blacklist + added_args
         depr_arg_names = set(depr_arg_names)
 
-        allowed_types = (str, int, float, bool)
+        allowed_types = (str, int, float, bool, dict)
 
         for arg, arg_types, arg_default in (
             at
@@ -87,7 +102,9 @@ class Engine(pl.LightningModule):
 
             arg_kwargs = {}
             arg_choices = None
-            if bool in arg_types:
+            if dict in arg_types:
+                use_type = json.loads
+            elif bool in arg_types:
                 arg_kwargs.update(nargs="?", const=True)
                 # if the only arg type is bool
                 if len(arg_types) == 1:
@@ -134,8 +151,8 @@ class Engine(pl.LightningModule):
         Example::
 
             parser = ArgumentParser(add_help=False)
-            parser = LightningDataModule.add_argparse_args(parser)
-            module = LightningDataModule.from_argparse_args(args)
+            parser = LightningModule.add_argparse_args(parser)
+            module = LightningModule.from_argparse_args(args)
 
         """
         if isinstance(args, ArgumentParser):
@@ -173,28 +190,24 @@ class Engine(pl.LightningModule):
         return name_type_default
 
     def configure_optimizers(self):
-        g_optim = Adam(self.generator.parameters(),
-                       lr=self.hparams.learning_rate,
-                       betas=(self.hparams.optim_b1, self.hparams.optim_b2))
-        d_optim = Adam(self.discriminator.parameters(),
-                       lr=self.hparams.learning_rate,
-                       betas=(self.hparams.optim_b1, self.hparams.optim_b2))
+        g_optim = Adam(self.G.parameters(),
+                       lr=self.hparams.learning_rate, **self.optimizer_options['args'])
+        d_optim = Adam(self.D.parameters(),
+                       lr=self.hparams.learning_rate, **self.optimizer_options['args'])
 
-        if self.hparams.lr_scheduler:
-            g_scheduler = StepLR(g_optim, step_size=self.hparams.lr_stepsize,
-                                 gamma=self.hparams.lr_gamma)
-            d_scheduler = StepLR(d_optim, step_size=self.hparams.lr_stepsize,
-                                 gamma=self.hparams.lr_gamma)
+        if self.scheduler_options:
+            g_scheduler = StepLR(g_optim, **self.scheduler_options['args'])
+            d_scheduler = StepLR(d_optim, **self.scheduler_options['args'])
             return [g_optim, d_optim], [g_scheduler, d_scheduler]
         return [g_optim, d_optim]
 
     def forward(self, X):
-        return self.generator(X)
+        return self.G(X)
 
-    def discriminator_loss(self, X):
+    def discriminator_loss(self, real):
         # Real Loss
         # Here y_hat -> Prediction whether real or fake
-        y_hat = self.discriminator(X)
+        y_hat = self.D(real)
         y = torch.ones_like(y_hat)
         real_loss = self.criterion(y_hat, y)
 
@@ -202,9 +215,9 @@ class Engine(pl.LightningModule):
 
         # Fake_loss
         latent_vector = torch.randn(
-            X.shape[0], self.hparams.latent_dim, device=self.device)
-        self.X_hat = self(latent_vector)
-        y_hat = self.discriminator(self.X_hat)
+            real.shape[0], self.hparams.latent_dim, device=self.device)
+        self.fake = self(latent_vector)
+        y_hat = self.D(self.fake)
         y = torch.zeros_like(y_hat)
         fake_loss = self.criterion(y_hat, y)
         # fake_acc = accuracy(torch.round(y_hat), y, num_classes=2)
@@ -215,12 +228,12 @@ class Engine(pl.LightningModule):
 
         return d_loss   # , acc
 
-    def generator_loss(self, X):
+    def generator_loss(self, real):
         # Fake Loss
         latent_vector = torch.randn(
-            X.shape[0], self.hparams.latent_dim, device=self.device)
-        self.X_hat = self(latent_vector)
-        y_hat = self.discriminator(self.X_hat)
+            real.shape[0], self.hparams.latent_dim, device=self.device)
+        self.fake = self(latent_vector)
+        y_hat = self.D(self.fake)
         y = torch.ones_like(y_hat, requires_grad=False)
         g_loss = self.criterion(y_hat, y)
         # acc = accuracy(torch.round(y_hat), y, num_classes=2)
@@ -228,12 +241,12 @@ class Engine(pl.LightningModule):
         return g_loss  # , acc
 
     def training_step(self, batch, batch_idx, optimizer_idx):
-        X, _ = batch
-        self.shape = tuple(X.shape)
-        X = torch.flatten(X, start_dim=1)
+        real, _ = batch
+        self.shape = tuple(real.shape)
+        real = torch.flatten(real, start_dim=1)
 
         if optimizer_idx == 0 and batch_idx % self.hparams.g_skip_batch == 0:
-            loss = self.generator_loss(X)        # , acc
+            loss = self.generator_loss(real)        # , acc
             logs = {"Loss/g_loss": loss,
                     # "Accuracy/g_acc": acc
                     }
@@ -243,7 +256,7 @@ class Engine(pl.LightningModule):
             return loss
 
         if optimizer_idx == 1 and batch_idx % self.hparams.d_skip_batch == 0:
-            loss = self.discriminator_loss(X)        # , acc
+            loss = self.discriminator_loss(real)        # , acc
             logs = {"Loss/d_loss": loss,
                     # "Accuracy/d_acc": acc
                     }
@@ -255,7 +268,7 @@ class Engine(pl.LightningModule):
     def on_train_epoch_end(self, outputs) -> None:
 
         self.logger.experiment.add_image(
-            'Generated Images', make_grid(self.X_hat.reshape(self.shape)),
+            'Generated Images', make_grid(self.fake.reshape(self.shape)),
             self.current_epoch
         )
 

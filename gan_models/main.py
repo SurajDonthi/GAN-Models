@@ -5,12 +5,12 @@ from pathlib2 import Path
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import TestTubeLogger
-import torch
+import torch as th
 from torch.utils.data import ConcatDataset, DataLoader
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST, FashionMNIST
 
-from data import CustomDataLoader
+from data import PytorchDataLoader
 from engine import Engine
 from utils import save_args
 
@@ -38,24 +38,11 @@ def main(args):
                                      #  save_top_k=1
                                      )
 
-    ######################## D A T A  L O A D I N G ########################
-    # TODO: Move code to pl.DataModule to dynamically load any Pytorch dataset + other custom DataModules
-    # data_loader = CustomDataLoader.from_argparse_args(args)
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
-    ])
-    train = MNIST(args.data_dir, download=True, transform=transform)
-    test = MNIST(args.data_dir, train=False,
-                 download=True, transform=transform)
-    train = ConcatDataset([train, test])
-    data_loader = DataLoader(train, args.train_batchsize,
-                             shuffle=True, num_workers=args.num_workers,
-                             pin_memory=True)
-    out_dim = int(torch.prod(torch.tensor(train[0][0].shape)))
-    ########################################################################
+    data_loader = PytorchDataLoader.from_argparse_args(args)
 
-    model = Engine.from_argparse_args(args, out_dim=out_dim)
+    img_shape = th.prod(th.tensor(data_loader.train_data[0][0].shape)).item()
+
+    model = Engine.from_argparse_args(args, out_dim=img_shape)
 
     save_args(args, log_dir)
 
@@ -71,7 +58,7 @@ if __name__ == "__main__":
 
     parser = ArgumentParser()
 
-    parser = CustomDataLoader.add_argparse_args(parser)
+    parser = PytorchDataLoader.add_argparse_args(parser)
     parser = Engine.add_argparse_args(parser)
     parser = Engine.add_additional_args(parser)
     parser = Trainer.add_argparse_args(parser)
