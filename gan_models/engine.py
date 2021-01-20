@@ -13,12 +13,12 @@ from torch.optim.lr_scheduler import StepLR
 from torchvision.utils import make_grid
 
 # import all GAN models here.
-from models import GAN
+from models import VanillaGAN
 from utils import filtered_kwargs
 
 MODELS = {
-    'gan': GAN,
-    'vanilla_gan': GAN
+    'gan': VanillaGAN,
+    'vanilla_gan': VanillaGAN
 }
 
 OPTIMIZERS = {
@@ -27,12 +27,8 @@ OPTIMIZERS = {
     'rmsprop': RMSprop
 }
 
-LOSSES = {
-    'bce': F.binary_cross_entropy,
-    'bce_logits': F.binary_cross_entropy_with_logits,
-    'cross_entropy': F.cross_entropy, 'nll_loss': F.nll_loss,
-    'kl_div': F.kl_div, 'mse': F.mse_loss,
-    'l1_loss': F.l1_loss
+SCHEDULERS = {
+    'steplr': StepLR
 }
 
 
@@ -40,7 +36,8 @@ class Engine(pl.LightningModule):
 
     def __init__(self, out_dim: int, latent_dim: int = 100,
                  model: Literal[tuple(MODELS.keys())] = 'gan',
-                 criterion: Literal[tuple(LOSSES.keys())] = 'bce',
+                 #  criterion: Union[
+                 #  Literal[tuple(LOSSES.keys())], dict] = 'bce',
                  learning_rate: float = 0.0002,
                  d_skip_batch: int = 1, g_skip_batch: int = 1,
                  optimizer_options: Optional[dict] = {
@@ -54,12 +51,16 @@ class Engine(pl.LightningModule):
         super().__init__()
 
         self.save_hyperparameters()
-        self._criterion = LOSSES[criterion]
+        self.lr = learning_rate
+        self.d_skip_batch, self.g_skip_batch = d_skip_batch, g_skip_batch
+        # if isinstance(criterion, str):
+        # criterion = {'generator': criterion, 'discriminator': criterion}
+        # self._criterion = {k: LOSSES[loss] for k, loss in criterion}
         self._optimizer_options = optimizer_options
         self._scheduler_options = scheduler_options
 
         self.model = MODELS[model](
-            latent_dim, out_dim, self._criterion, model_args)
+            latent_dim, out_dim, **model_args)
         self.G, self.D = self.model.G, self.model.D
         self.G_loss, self.D_loss = self.model.G_loss, self.model.D_loss
 
@@ -190,16 +191,19 @@ class Engine(pl.LightningModule):
 
     def configure_optimizers(self):
         g_optim = Adam(self.G.parameters(),
-                       lr=self.hparams.learning_rate,
+                       lr=self.lr,
                        **self._optimizer_options['args'])
         d_optim = Adam(self.D.parameters(),
-                       lr=self.hparams.learning_rate,
+                       lr=self.lr,
                        **self._optimizer_options['args'])
 
         if self._scheduler_options:
-            g_scheduler = StepLR(g_optim, **self._scheduler_options['args'])
-            d_scheduler = StepLR(d_optim, **self._scheduler_options['args'])
+            scheduler = SCHEDULERS[self._scheduler_options['method']]
+            g_scheduler = scheduler(g_optim, **self._scheduler_options['args'])
+            d_scheduler = scheduler(d_optim, **self._scheduler_options['args'])
+
             return [g_optim, d_optim], [g_scheduler, d_scheduler]
+
         return [g_optim, d_optim]
 
     def forward(self, X):
