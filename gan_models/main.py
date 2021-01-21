@@ -10,7 +10,7 @@ from torch.utils.data import ConcatDataset, DataLoader
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST, FashionMNIST
 
-from data import PytorchDataLoader
+from data import TorchDataLoader
 from engine import Engine
 from utils import save_args
 
@@ -38,7 +38,7 @@ def main(args):
                                      #  save_top_k=1
                                      )
 
-    data_loader = PytorchDataLoader.from_argparse_args(args)
+    data_loader = TorchDataLoader.from_argparse_args(args, dataset='cifar10')
 
     img_shape = data_loader.train_data[0][0].shape
 
@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
     parser = ArgumentParser()
 
-    parser = PytorchDataLoader.add_argparse_args(parser)
+    parser = TorchDataLoader.add_argparse_args(parser)
     parser = Engine.add_argparse_args(parser)
     parser = Engine.add_additional_args(parser)
     parser = Trainer.add_argparse_args(parser)

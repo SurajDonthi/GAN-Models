@@ -13,12 +13,13 @@ from torch.optim.lr_scheduler import StepLR
 from torchvision.utils import make_grid
 
 # import all GAN models here.
-from models import VanillaGAN
+from models import VanillaGAN1D, FMGAN2D
 from utils import filtered_kwargs
 
 MODELS = {
-    'gan': VanillaGAN,
-    'vanilla_gan': VanillaGAN
+    'gan': VanillaGAN1D,
+    'vanilla_gan': VanillaGAN1D,
+    'feature_matching': FMGAN2D
 }
 
 OPTIMIZERS = {
@@ -41,11 +42,9 @@ class Engine(pl.LightningModule):
                  learning_rate: float = 0.0002,
                  d_skip_batch: int = 1, g_skip_batch: int = 1,
                  optimizer_options: Optional[dict] = {
-                     'optim': 'Adam', 'args': {'betas': (0.5, 0.999)}},
+                     'optim': 'adam', 'args': {'betas': (0.5, 0.999)}},
                  scheduler_options: Optional[dict] = None,
-                 model_args: dict = {
-                     'discriminator': {'hidden_layers': [512, 256]},
-                     'generator': {'hidden_layers': [128, 256, 512, 1024]}}
+                 model_args: Optional[dict] = None
                  ):
 
         super().__init__()
@@ -59,6 +58,8 @@ class Engine(pl.LightningModule):
         self._optimizer_options = optimizer_options
         self._scheduler_options = scheduler_options
 
+        if model_args is None:
+            model_args = {'generator': {}, 'discriminator': {}}
         self.model = MODELS[model](
             latent_dim, out_dim, **model_args)
         self.G, self.D = self.model.G, self.model.D
@@ -190,12 +191,13 @@ class Engine(pl.LightningModule):
         return name_type_default
 
     def configure_optimizers(self):
-        g_optim = Adam(self.G.parameters(),
-                       lr=self.lr,
-                       **self._optimizer_options['args'])
-        d_optim = Adam(self.D.parameters(),
-                       lr=self.lr,
-                       **self._optimizer_options['args'])
+        Optim = OPTIMIZERS[self._optimizer_options['optim']]
+        g_optim = Optim(self.G.parameters(),
+                        lr=self.lr,
+                        **self._optimizer_options['args'])
+        d_optim = Optim(self.D.parameters(),
+                        lr=self.lr,
+                        **self._optimizer_options['args'])
 
         if self._scheduler_options:
             scheduler = SCHEDULERS[self._scheduler_options['method']]

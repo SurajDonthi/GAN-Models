@@ -4,6 +4,8 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision.datasets import CIFAR10, MNIST, Caltech101, FashionMNIST
 from torchvision.transforms import transforms
 
+from typing import Literal
+
 from utils import filtered_kwargs
 
 
@@ -34,10 +36,10 @@ MEAN_N_STD = {
 }
 
 
-class PytorchDataLoader(pl.LightningDataModule):
+class TorchDataLoader(pl.LightningDataModule):
 
     def __init__(self, data_dir: str,
-                 dataset: str = 'mnist',
+                 dataset: Literal[tuple(DATASETS.keys())] = 'mnist',
                  train: bool = True,
                  download: bool = False,
                  train_batchsize: int = 32,

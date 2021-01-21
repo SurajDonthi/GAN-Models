@@ -5,14 +5,6 @@ from abc import ABC, abstractmethod
 
 from utils import filtered_kwargs
 
-LOSSES = {
-    'bce': F.binary_cross_entropy,
-    'bce_logits': F.binary_cross_entropy_with_logits,
-    'cross_entropy': F.cross_entropy, 'nll_loss': F.nll_loss,
-    'kl_div': F.kl_div, 'mse': F.mse_loss,
-    'l1_loss': F.l1_loss
-}
-
 
 class GANModels(ABC):
 
@@ -54,7 +46,7 @@ class GANModels(ABC):
         return loss
 
 
-class VanillaGAN(GANModels):
+class VanillaGAN1D(GANModels):
 
     class Generator(GANModels.Generator):
         def __init__(self, img_shape: int, latent_dim: int = 100,
@@ -184,65 +176,168 @@ class VanillaGAN(GANModels):
         return loss  # , acc
 
 
-# TODO: Implement the below models with similar interface!
-
-
-class FMGAN:
+class FMGAN2D(GANModels):
     """
     Feature Matching for training the Vanilla GAN model.
     """
 
-    def __init__(self, latent_dim, img_shape, criterion, **model_args) -> None:
+    class Generator(GANModels.Generator):
+        def __init__(self, img_shape: int, latent_dim: int = 100,
+                     #  normalize: bool = False,
+                     hidden_channels: list = [256, 128, 64, 32], **kwargs):
+            super().__init__(img_shape, latent_dim)
+            self.hidden_channels = hidden_channels
+            self.out_channels = self.img_shape[0]
 
-        self.latent_dim = latent_dim
-        self.img_shape = img_shape
-        self.criterion = criterion
+            self._model_generator()
 
-        self.D = Discriminator(img_shape=img_shape,
-                               **model_args['discriminator'])
-        self.G = Generator(img_shape, latent_dim, **model_args['generator'])
+        def conv_block(self, in_channels, out_channels, normalize=True):
+            layers = [nn.ConvTranspose2d(
+                in_channels, out_channels, 4, 2, 1, bias=False)]
+            if normalize:
+                layers.append(nn.BatchNorm2d(out_channels, eps=0.8))
+            layers.append(nn.LeakyReLU(0.02, inplace=True))
+            return nn.Sequential(*layers)
+
+        def _model_generator(self):
+            input_channels = self.latent_dim
+            for i, channels in enumerate(self.hidden_channels):
+                name = f'conv{i}'
+                layer = self.conv_block(input_channels, channels,
+                                        normalize=False if i == 0 else True)
+
+                setattr(self, name, layer)
+                input_channels = channels
+
+            self.final = nn.Sequential(*[
+                nn.ConvTranspose2d(
+                    input_channels, self.out_channels, 4, 2, 1, bias=False),
+                nn.Tanh()
+            ])
+
+        def forward(self, X):
+            X = X.view(-1, self.latent_dim, 1, 1)
+            for i, _ in enumerate(self.hidden_channels):
+                name = f'conv{i}'
+                conv = getattr(self, name)
+                X = conv(X)
+
+            X = self.final(X)
+
+            return X
+
+    class Discriminator(GANModels.Discriminator):
+        def __init__(self, img_shape, hidden_channels=[32, 64, 128, 256], **kwargs):
+            super().__init__(img_shape)
+            self.hidden_channels = hidden_channels
+            self._model_generator()
+
+        def conv_block(self, in_channels, out_channels,
+                       activation=True, normalize=True):
+
+            layers = [nn.Conv2d(in_channels, out_channels,
+                                4, 2, 1, bias=False)]
+            if normalize:
+                layers.append(nn.BatchNorm2d(out_channels))
+            if activation:
+                layers.append(nn.LeakyReLU(0.02, inplace=True))
+            return nn.Sequential(*layers)
+
+        def get_output_shape(self, model, image_dim):
+            return model(th.rand(*(image_dim))).data.shape
+
+        def _model_generator(self):
+            in_channels = self.img_shape[0]
+            layer_dim = [1] + list(self.img_shape)
+            for i, channels in enumerate(self.hidden_channels):
+                name = f'conv{i}'
+
+                layer = self.conv_block(in_channels, channels,
+                                        activation=False if i == len(
+                                            self.hidden_channels)-1 else True,
+                                        normalize=False if i == 0 else True)
+                layer_dim = self.get_output_shape(layer, layer_dim)
+
+                setattr(self, name, layer)
+                in_channels = channels
+
+            self.layer_dim = th.prod(th.tensor(layer_dim)).item()
+            self.final = nn.Linear(self.layer_dim, 10)
+
+        def forward(self, X, feature_matching=False):
+
+            for i, _ in enumerate(self.hidden_channels):
+                name = f'conv{i}'
+                conv = getattr(self, name)
+                X = conv(X)
+
+            feature = X.view(-1, self.layer_dim)
+            X = self.final(feature)
+            if feature_matching:
+                return feature
+
+            # X = F.sigmoid(self.final(X))
+            return X
+
+    def __init__(self, latent_dim, img_shape, **model_args) -> None:
+        super().__init__(latent_dim, img_shape, **model_args)
+        self.g_criterion = nn.MSELoss()
+        self.d_criterion = nn.CrossEntropyLoss()
 
     def _init_device(self, device):
         self.device = device
 
+    def log_sum_exp(self, tensor, keepdim=True):
+        r"""
+        Numerically stable implementation for the `LogSumExp` operation. The
+        summing is done along the last dimension.
+        Args:
+            tensor (torch.Tensor)
+            keepdim (Boolean): Whether to retain the last dimension on summing.
+        """
+        max_val = tensor.max(dim=-1, keepdim=True)[0]
+        return max_val + (tensor - max_val).exp().sum(dim=-1, keepdim=keepdim).log()
+
     def D_loss(self, batch):
-        real, _ = batch
-        # Real Loss
-        # Here preds -> Prediction whether real or fake
+        real, label = batch
+
+        # Real preds
         preds = self.D(real)
 
-        valid = th.ones_like(preds)
-        real_loss = self.criterion(preds, valid)
+        # Label Loss
+        label_loss = self.d_criterion(preds, label)
 
-        # real_acc = accuracy(th.round(preds), y)
+        # Unsupervised Real loss
+        lse_out = self.log_sum_exp(preds)
+        unsupervised_real_loss = - \
+            th.mean(lse_out, 0) + th.mean(F.softplus(lse_out, 1), 0)
 
-        # Fake_loss
+        # Unsupervised Fake loss
         z = th.randn(
             real.shape[0], self.latent_dim, device=self.device)
         preds = self.D(self.G(z))
 
-        fake = th.zeros_like(preds)
-        fake_loss = self.criterion(preds, fake)
-        # fake_acc = accuracy(th.round(preds), y, num_classes=2)
+        unsupervised_fake_loss = th.mean(
+            F.softplus(self.log_sum_exp(preds), 1), 0)
 
-        loss = (real_loss + fake_loss) / 2
+        loss = label_loss + \
+            (unsupervised_real_loss + unsupervised_fake_loss) / 2
 
-        # acc = real_acc + fake_acc
-
-        return loss   # , acc
+        return loss
 
     def G_loss(self, batch):
         real, _ = batch
+
+        real_feature = self.D(real, feature_matching=True)
+
         # Fake Loss
         z = th.randn(real.shape[0], self.latent_dim, device=self.device)
         self.gen_imgs = self.G(z)
-        preds = self.D(self.gen_imgs)
+        fake_feature = self.D(self.gen_imgs, feature_matching=True)
 
-        valid = th.ones_like(preds, requires_grad=False)
-        loss = self.criterion(preds, valid)
-        # acc = accuracy(th.round(preds), y, num_classes=2)
+        loss = self.g_criterion(fake_feature, real_feature)
 
-        return loss  # , acc
+        return loss
 
 
 class DCGAN(GANModels):
@@ -256,29 +351,29 @@ class DCGAN(GANModels):
 class WassersteinGAN:
 
     def __init__(self) -> None:
-        self.discriminator = None
-        self.generator = None
+        self.D = None
+        self.D = None
 
 
 class CGAN:
     def __init__(self) -> None:
-        self.discriminator = None
-        self.generator = None
+        self.D = None
+        self.G = None
 
 
 class InfoGAN:
     def __init__(self) -> None:
-        self.discriminator = None
-        self.generator = None
+        self.D = None
+        self.G = None
 
 
 class CycleGAN:
     def __init__(self) -> None:
-        self.discriminator = None
-        self.generator = None
+        self.D = None
+        self.G = None
 
 
 class BigGAN:
     def __init__(self) -> None:
-        self.discriminator = None
-        self.generator = None
+        self.D = None
+        self.G = None
