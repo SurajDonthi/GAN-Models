@@ -50,7 +50,6 @@ class VanillaGAN1D(GANModels):
 
     class Generator(GANModels.Generator):
         def __init__(self, img_shape: int, latent_dim: int = 100,
-                     #  normalize: bool = False,
                      hidden_layers: list = [128, 256, 512, 1024]):
             super().__init__(img_shape, latent_dim)
 
@@ -145,8 +144,6 @@ class VanillaGAN1D(GANModels):
         valid = th.ones_like(preds)
         real_loss = self.criterion(preds, valid)
 
-        # real_acc = accuracy(th.round(preds), y)
-
         # Fake_loss
         z = th.randn(
             real.shape[0], self.latent_dim, device=self.device)
@@ -154,13 +151,10 @@ class VanillaGAN1D(GANModels):
 
         fake = th.zeros_like(preds)
         fake_loss = self.criterion(preds, fake)
-        # fake_acc = accuracy(th.round(preds), y, num_classes=2)
 
         loss = (real_loss + fake_loss) / 2
 
-        # acc = real_acc + fake_acc
-
-        return loss   # , acc
+        return loss
 
     def G_loss(self, batch):
         real, _ = batch
@@ -176,9 +170,141 @@ class VanillaGAN1D(GANModels):
         return loss  # , acc
 
 
+class DCGAN(GANModels):
+    """
+    DCGAN model.
+    """
+
+    class Generator(GANModels.Generator):
+        def __init__(self, img_shape: int, latent_dim: int = 100,
+                     hidden_channels: list = [256, 128, 64, 32], **kwargs):
+            super().__init__(img_shape, latent_dim)
+            self.hidden_channels = hidden_channels
+            self.out_channels = self.img_shape[0]
+
+            self._model_generator()
+
+        def conv_block(self, in_channels, out_channels, stride=2, normalize=True):
+            layers = [nn.ConvTranspose2d(
+                in_channels, out_channels, 4, stride, 1, bias=False)]
+            if normalize:
+                layers.append(nn.BatchNorm2d(out_channels, eps=0.8))
+            layers.append(nn.ReLU(0.02, inplace=True))
+            return nn.Sequential(*layers)
+
+        def _model_generator(self):
+            input_channels = self.latent_dim
+            for i, channels in enumerate(self.hidden_channels):
+                name = f'conv{i}'
+                layer = self.conv_block(input_channels, channels,
+                                        stride=1 if i == 0 else 2)
+
+                setattr(self, name, layer)
+                input_channels = channels
+
+            self.final = nn.Sequential(*[
+                nn.ConvTranspose2d(
+                    input_channels, self.out_channels, 4, 2, 1, bias=False),
+                nn.Tanh()
+            ])
+
+        def forward(self, X):
+            X = X.view(-1, self.latent_dim, 1, 1)
+            for i, _ in enumerate(self.hidden_channels):
+                name = f'conv{i}'
+                conv = getattr(self, name)
+                X = conv(X)
+
+            X = self.final(X)
+
+            return X
+
+    class Discriminator(GANModels.Discriminator):
+        def __init__(self, img_shape, hidden_channels=[32, 64, 128, 256], **kwargs):
+            super().__init__(img_shape)
+            self.hidden_channels = hidden_channels
+            self._model_generator()
+
+        def conv_block(self, in_channels, out_channels,
+                       activation=True, normalize=True):
+
+            layers = [nn.Conv2d(in_channels, out_channels,
+                                4, 2, 1, bias=False)]
+            if normalize:
+                layers.append(nn.BatchNorm2d(out_channels))
+            if activation:
+                layers.append(nn.LeakyReLU(0.02, inplace=True))
+            return nn.Sequential(*layers)
+
+        def _model_generator(self):
+            in_channels = self.img_shape[0]
+            layer_dim = [1] + list(self.img_shape)
+            for i, channels in enumerate(self.hidden_channels):
+                name = f'conv{i}'
+
+                layer = self.conv_block(in_channels, channels,
+                                        activation=False if i == len(
+                                            self.hidden_channels)-1 else True,
+                                        normalize=False if i == 0 else True)
+
+                setattr(self, name, layer)
+                in_channels = channels
+
+            self.final = nn.Conv2d(in_channels, 1, 4, 1, 0, bias=False)
+
+        def forward(self, X):
+
+            for i, _ in enumerate(self.hidden_channels):
+                name = f'conv{i}'
+                conv = getattr(self, name)
+                X = conv(X)
+
+            X = self.final(X)
+            X = F.sigmoid(X)
+
+            return X.view(-1)
+
+    def __init__(self, latent_dim, img_shape, **model_args) -> None:
+        super().__init__(latent_dim, img_shape, **model_args)
+        self.criterion = nn.BCELoss()
+
+    def D_loss(self, batch):
+        real, _ = batch
+
+        preds = self.D(real)
+
+        # Real Loss
+        valid = th.ones_like(preds)
+        real_loss = self.criterion(preds, valid)
+
+        # Fake loss
+        z = th.randn(real.shape[0], self.latent_dim, device=self.device)
+        preds = self.D(self.G(z))
+
+        fake = th.ones_like(preds)
+        fake_loss = self.criterion(preds, fake)
+
+        loss = real_loss + fake_loss
+
+        return loss
+
+    def G_loss(self, batch):
+        real, _ = batch
+
+        # Fake Loss
+        z = th.randn(real.shape[0], self.latent_dim, device=self.device)
+        self.gen_imgs = self.G(z)
+        preds = self.D(self.gen_img)
+
+        fake = th.ones_like(preds)
+        loss = self.criterion(preds, fake)
+
+        return loss
+
+
 class FMGAN2D(GANModels):
     """
-    Feature Matching for training the Vanilla GAN model.
+    Implements Feature Matching and semi-supervised learning for DCGAN model.
     """
 
     class Generator(GANModels.Generator):
@@ -284,9 +410,6 @@ class FMGAN2D(GANModels):
         self.g_criterion = nn.MSELoss()
         self.d_criterion = nn.CrossEntropyLoss()
 
-    def _init_device(self, device):
-        self.device = device
-
     def log_sum_exp(self, tensor, keepdim=True):
         r"""
         Numerically stable implementation for the `LogSumExp` operation. The
@@ -340,40 +463,75 @@ class FMGAN2D(GANModels):
         return loss
 
 
-class DCGAN(GANModels):
-    class Generator(GANModels.Generator):
-        pass
+class WassersteinGAN(GANModels):
+    BASE_MODELS = {'mlp': VanillaGAN1D, 'dcgan': DCGAN}
 
-    class Discriminator(GANModels.Discriminator):
-        pass
+    def __init__(self, latent_dim, img_shape, clip_value=0.01, **model_args) -> None:
+        super().__init__(latent_dim, img_shape, **model_args)
+
+        model_type = model_args['model_type']
+        model = self.BASE_MODELS[model_type]
+        self.model_args = model_args
+        self.clip_value = clip_value
+
+        self.G = model.Generator(
+            img_shape, latent_dim, **model_args['generator'])
+        self.D = model.Discriminator(img_shape, **model_args['discriminator'])
+
+    def D_loss(self, batch):
+        # Clip weights at (before or after doesn't make a diff) every iteration
+        for p in self.D.parameters():
+        p.data.clamp_(-self.clip_value, self.clip_value)
+
+        # Real
+        real, _ = batch
+        real_preds = self.D(real)
+        real_loss = -th.mean(real_preds)
+
+        # Fake
+        z = th.randn(real.shape[0], self.latent_dim, device=self.device)
+        fake_preds = self.D(self.G(z))
+        fake_loss = th.mean(fake_preds)
+
+        loss = real_loss + fake_loss
+
+        return loss
+
+    def G_loss(self, batch):
+        real, _ = batch
+
+        # Fake
+        z = th.randn(real.shape[0], self.latent_dim, device=self.device)
+        fake_preds = self.D(self.G(z))
+
+        loss = -th.mean(fake_preds)
+
+        return loss
 
 
-class WassersteinGAN:
-
-    def __init__(self) -> None:
-        self.D = None
-        self.D = None
+class CramerGAN(GANModels):
+    pass
 
 
-class CGAN:
+class CGAN(GANModels):
     def __init__(self) -> None:
         self.D = None
         self.G = None
 
 
-class InfoGAN:
+class InfoGAN(GANModels):
     def __init__(self) -> None:
         self.D = None
         self.G = None
 
 
-class CycleGAN:
+class CycleGAN(GANModels):
     def __init__(self) -> None:
         self.D = None
         self.G = None
 
 
-class BigGAN:
+class BigGAN(GANModels):
     def __init__(self) -> None:
         self.D = None
         self.G = None

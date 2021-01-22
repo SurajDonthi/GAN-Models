@@ -13,13 +13,15 @@ from torch.optim.lr_scheduler import StepLR
 from torchvision.utils import make_grid
 
 # import all GAN models here.
-from models import VanillaGAN1D, FMGAN2D
+from models import VanillaGAN1D, FMGAN2D, DCGAN, WassersteinGAN
 from utils import filtered_kwargs
 
 MODELS = {
     'gan': VanillaGAN1D,
     'vanilla_gan': VanillaGAN1D,
-    'feature_matching': FMGAN2D
+    'dcgan': DCGAN,
+    'feature_matching': FMGAN2D,
+    'wasserstein_gan': WassersteinGAN
 }
 
 OPTIMIZERS = {
@@ -37,8 +39,6 @@ class Engine(pl.LightningModule):
 
     def __init__(self, out_dim: int, latent_dim: int = 100,
                  model: Literal[tuple(MODELS.keys())] = 'gan',
-                 #  criterion: Union[
-                 #  Literal[tuple(LOSSES.keys())], dict] = 'bce',
                  learning_rate: float = 0.0002,
                  d_skip_batch: int = 1, g_skip_batch: int = 1,
                  optimizer_options: Optional[dict] = {
@@ -52,18 +52,22 @@ class Engine(pl.LightningModule):
         self.save_hyperparameters()
         self.lr = learning_rate
         self.d_skip_batch, self.g_skip_batch = d_skip_batch, g_skip_batch
-        # if isinstance(criterion, str):
-        # criterion = {'generator': criterion, 'discriminator': criterion}
-        # self._criterion = {k: LOSSES[loss] for k, loss in criterion}
         self._optimizer_options = optimizer_options
         self._scheduler_options = scheduler_options
 
-        if model_args is None:
-            model_args = {'generator': {}, 'discriminator': {}}
+        model_args = self.generalize_args(model_args)
         self.model = MODELS[model](
             latent_dim, out_dim, **model_args)
         self.G, self.D = self.model.G, self.model.D
         self.G_loss, self.D_loss = self.model.G_loss, self.model.D_loss
+
+    def generalize_args(self, kwargs):
+        if (kwargs is None):
+            kwargs = {'generator': {}, 'discriminator': {}}
+        # <= --> Check whether subset
+        if not ({'generator', 'discriminator'} <= kwargs.keys()):
+            kwargs = {**kwargs, 'generator': kwargs, 'discriminator': kwargs}
+        return kwargs
 
     @staticmethod
     def add_additional_args(parent_parser):

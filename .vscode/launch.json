@@ -8,7 +8,7 @@
       "name": "Training",
       "type": "python",
       "request": "launch",
-      "program": "${workspaceFolder}/gan_models/main.py",
+      "program": "${workspaceFolder}/gan_models/train.py",
       "console": "integratedTerminal",
       "pythonArgs": ["-W", "ignore::UserWarning::0"],
       "args": [
@@ -36,7 +36,7 @@
       "name": "Debugging - MNIST GAN1D",
       "type": "python",
       "request": "launch",
-      "program": "${workspaceFolder}/gan_models/main.py",
+      "program": "${workspaceFolder}/gan_models/train.py",
       "console": "integratedTerminal",
       "pythonArgs": ["-W", "ignore::UserWarning::0"],
       "args": [
@@ -70,7 +70,7 @@
       "name": "Debugging - CIFAR10 Feature Matching",
       "type": "python",
       "request": "launch",
-      "program": "${workspaceFolder}/gan_models/main.py",
+      "program": "${workspaceFolder}/gan_models/train.py",
       "console": "integratedTerminal",
       "pythonArgs": ["-W", "ignore::UserWarning::0"],
       "args": [
