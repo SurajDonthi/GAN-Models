@@ -55,6 +55,7 @@ class VanillaGAN1D(GANModels):
 
             self.flattened_img_shape = th.prod(th.tensor(img_shape)).item()
             self.hidden_layers = hidden_layers
+            self.input_dim = self.latent_dim
 
             self.layers = [latent_dim] + \
                 self.hidden_layers + [self.flattened_img_shape]
@@ -62,7 +63,7 @@ class VanillaGAN1D(GANModels):
             self._model_generator()
 
         def _model_generator(self):
-            input_dim = self.latent_dim
+            input_dim = self.input_dim
             for i, dim in enumerate(self.hidden_layers):
                 name = f'linear{i}'
                 if i == 0:
@@ -101,10 +102,11 @@ class VanillaGAN1D(GANModels):
             self.flattened_img_shape = th.prod(th.tensor(img_shape)).item()
             self.hidden_layers = hidden_layers
             self.layers = [self.flattened_img_shape] + self.hidden_layers + [1]
+            self.input_dim = self.flattened_img_shape
             self._model_generator()
 
         def _model_generator(self):
-            input_dim = self.flattened_img_shape
+            input_dim = self.input_dim
             for i, dim in enumerate(self.hidden_layers):
                 name = f'linear{i}'
                 layer = self.linear_block(input_dim, dim)
@@ -463,6 +465,78 @@ class FMGAN2D(GANModels):
         return loss
 
 
+class CGAN(VanillaGAN1D):
+    class Generator(VanillaGAN1D.Generator):
+        def __init__(self, img_shape: int, latent_dim: int, num_classes,
+                     hidden_layers: list = [512, 256]):
+            super().__init__(img_shape, latent_dim=latent_dim,
+                             hidden_layers=hidden_layers)
+
+            self.num_classes = num_classes
+            self.input_dim = self.latent_dim + self.num_classes
+            self._model_generator()
+
+            self.embeddings = nn.Embedding(num_classes, num_classes)
+
+        def forward(self, noise, labels):
+            noise = th.cat((noise, self.embeddings(labels)), dim=-1)
+            return super().forward(noise)
+
+    class Discriminator(VanillaGAN1D.Discriminator):
+        def __init__(self, img_shape, hidden_layers, num_classes):
+            super().__init__(img_shape, hidden_layers=hidden_layers)
+
+            self.num_classes = num_classes
+            self.input_dim = self.flattened_img_shape + self.num_classes
+            self._model_generator()
+
+            self.embeddings = nn.Embedding(num_classes, num_classes)
+
+        def forward(self, imgs, labels):
+            imgs = th.cat(
+                (imgs.view(imgs.shape[0], -1), self.embeddings(labels)),
+                dim=-1)
+            return super().forward(imgs)
+
+    def __init__(self, latent_dim, img_shape, num_classes, **model_args) -> None:
+        super().__init__(latent_dim, img_shape,  num_classes, **model_args)
+
+        self.num_classes = num_classes
+        self.criterion = nn.MSELoss()
+
+    def G_loss(self, batch):
+        real, _ = batch
+        # Fake Loss
+        z = th.randn(real.shape[0], self.latent_dim, device=self.device)
+        gen_labels = th.randint(10, (real.shape[0],), device=self.device)
+        self.gen_imgs = self.G(z, gen_labels)
+        preds = self.D(self.gen_imgs)
+
+        valid = th.ones_like(preds, requires_grad=False)
+        loss = self.criterion(preds, valid)
+
+        return loss
+
+    def D_loss(self, batch):
+        real, _ = batch
+        # Real Loss
+        # Here preds -> Prediction whether real or fake
+        preds = self.D(real)
+
+        valid = th.ones_like(preds)
+        real_loss = self.criterion(preds, valid)
+
+        # Fake_loss
+        preds = self.D(self.gen_imgs)
+
+        fake = th.zeros_like(preds)
+        fake_loss = self.criterion(preds, fake)
+
+        loss = (real_loss + fake_loss) / 2
+
+        return loss
+
+
 class WassersteinGAN(GANModels):
     BASE_MODELS = {'mlp': VanillaGAN1D, 'dcgan': DCGAN}
 
@@ -474,6 +548,7 @@ class WassersteinGAN(GANModels):
         self.model_args = model_args
         self.clip_value = clip_value
 
+        # Create G & D again as we are setting MLP or DCGAN as base!
         self.G = model.Generator(
             img_shape, latent_dim, **model_args['generator'])
         self.D = model.Discriminator(img_shape, **model_args['discriminator'])
@@ -592,12 +667,6 @@ class CramerGAN(GANModels):
 
         loss = - surrogate + gradient_penalty * self.gp_scale
         return loss
-
-
-class CGAN(GANModels):
-    def __init__(self) -> None:
-        self.D = None
-        self.G = None
 
 
 class InfoGAN(GANModels):
