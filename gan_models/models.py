@@ -455,7 +455,7 @@ class FMGAN2D(GANModels):
 
         # Fake Loss
         z = th.randn(real.shape[0], self.latent_dim, device=self.device)
-        self.gen_imgs = self.G(z)
+        self.gen_imgs = self.G(z)       # Also for logging in TensorBoard
         fake_feature = self.D(self.gen_imgs, feature_matching=True)
 
         loss = self.g_criterion(fake_feature, real_feature)
@@ -502,7 +502,8 @@ class WassersteinGAN(GANModels):
 
         # Fake
         z = th.randn(real.shape[0], self.latent_dim, device=self.device)
-        fake_preds = self.D(self.G(z))
+        self.gen_imgs = self.G(z)       # Also for logging in TensorBoard
+        fake_preds = self.D(self.gen_imgs)
 
         loss = -th.mean(fake_preds)
 
@@ -510,7 +511,87 @@ class WassersteinGAN(GANModels):
 
 
 class CramerGAN(GANModels):
-    pass
+    BASE_MODELS = {'mlp': VanillaGAN1D, 'dcgan': DCGAN}
+
+    def __init__(self, latent_dim, img_shape, gp_scale=10, **model_args) -> None:
+        super().__init__(latent_dim, img_shape, **model_args)
+
+        self.gp_scale = gp_scale
+
+        model_type = model_args['model_type']
+        model = self.BASE_MODELS[model_type]
+        self.model_args = model_args
+
+        self.G = model.Generator(
+            img_shape, latent_dim, **model_args['generator'])
+        self.D = model.Discriminator(img_shape, **model_args['discriminator'])
+
+    def critic(self, x1, x2):
+        return th.linalg.norm(x1 - x2, dim=1) - th.linalg.norm(x1, dim=1)
+
+    def G_loss(self, batch):
+
+        real, _ = batch
+
+        real_preds = self.D(real)
+
+        z1 = th.randn(real.shape[0], self.latent_dim, device=self.device)
+        fake_preds1 = self.D(self.G(z1))
+
+        z2 = th.randn(real.shape[0], self.latent_dim, device=self.device)
+        self.gen_imgs = self.G(z2)      # For logging in TensorBoard
+        fake_preds2 = self.D(self.gen_imgs)
+
+        self.g_loss = th.mean(
+            self.critic(real_preds - fake_preds1) -
+            self.critic(fake_preds1 - fake_preds2)
+        )
+
+        return self.g_loss
+
+    def calc_gradient_penalty(self, real, fake, fake_preds):
+        alpha = th.rand(real.shape[0], [1] *
+                        len(real.shape[1:]), device=self.device)
+        alpha = alpha.expand_as(real)
+
+        interpolates = alpha * real + (1 - alpha) * fake
+
+        d_interpolates = self.critic(self.D(interpolates), fake_preds)
+
+        grad_outputs = th.ones_like(d_interpolates)
+
+        gradients = th.autograd.grad(outputs=d_interpolates,
+                                     inputs=interpolates,
+                                     grad_outputs=grad_outputs,
+                                     create_graph=True, retain_graph=True,
+                                     only_inputs=True)[0]
+
+        gradient_penalty = th.mean((gradients.norm(2, dim=1) - 1) ** 2)
+
+        return gradient_penalty
+
+    def D_loss(self, batch):
+        real, _ = batch
+
+        real_preds = self.D(real)
+
+        z1 = th.randn(real.shape[0], self.latent_dim, device=self.device)
+        fake1 = self.G(z1)
+        fake_preds1 = self.D()
+
+        z2 = th.randn(real.shape[0], self.latent_dim, device=self.device)
+        fake2 = self.G(z2)
+        fake_preds2 = self.D(self.gen_imgs)
+
+        surrogate = th.mean(
+            self.critic(real_preds, fake_preds2) -
+            self.critic(fake_preds1, fake_preds2)
+        )
+
+        gradient_penalty = self.calc_gradient_penalty(real, fake1, fake_preds1)
+
+        loss = - surrogate + gradient_penalty * self.gp_scale
+        return loss
 
 
 class CGAN(GANModels):
