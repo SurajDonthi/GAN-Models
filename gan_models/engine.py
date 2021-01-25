@@ -22,7 +22,7 @@ MODELS = {
     'dcgan': DCGAN,
     'feature_matching': FMGAN2D,
     'cgan': CGAN,
-    'wasserstein_gan': WassersteinGAN,
+    'wgan': WassersteinGAN,
     'cramer_gan': CramerGAN
 }
 
@@ -244,8 +244,10 @@ class Engine(pl.LightningModule):
 
     def on_train_epoch_end(self, outputs) -> None:
 
+        z = th.randn(64, self.hparams.latent_dim, device=self.device)
+
         self.logger.experiment.add_image(
-            'Generated Images', make_grid(self.model.gen_imgs),
+            'Generated Images', make_grid(self.G(z)),
             self.current_epoch
         )
 

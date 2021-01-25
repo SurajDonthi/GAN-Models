@@ -61,7 +61,7 @@
         "--limit_train_batches",
         "0.05",
         "--max_epochs",
-        "10",
+        "20",
         "--profiler",
         "True"
       ]
@@ -97,7 +97,7 @@
         "--limit_train_batches",
         "0.05",
         "--max_epochs",
-        "10",
+        "20",
         "--profiler",
         "True"
       ]
@@ -133,7 +133,7 @@
         "--limit_train_batches",
         "0.05",
         "--max_epochs",
-        "10",
+        "20",
         "--profiler",
         "True"
       ]
@@ -173,7 +173,7 @@
         "--limit_train_batches",
         "0.05",
         "--max_epochs",
-        "10",
+        "20",
         "--profiler",
         "True"
       ]
@@ -188,6 +188,8 @@
       "args": [
         "--model",
         "wgan",
+        "--model_args",
+        "{\\\"model_type\\\":\\\"mlp\\\"}",
         "--data_dir",
         "data/",
         // "--dataset",
@@ -209,7 +211,7 @@
         "--limit_train_batches",
         "0.05",
         "--max_epochs",
-        "10",
+        "20",
         "--profiler",
         "True"
       ]
@@ -245,7 +247,7 @@
         "--limit_train_batches",
         "0.05",
         "--max_epochs",
-        "10",
+        "20",
         "--profiler",
         "True"
       ]

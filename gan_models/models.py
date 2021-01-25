@@ -50,7 +50,7 @@ class VanillaGAN1D(GANModels):
 
     class Generator(GANModels.Generator):
         def __init__(self, img_shape: int, latent_dim: int = 100,
-                     hidden_layers: list = [128, 256, 512, 1024]):
+                     hidden_layers: list = [128, 256, 512, 1024], **kwargs):
             super().__init__(img_shape, latent_dim)
 
             self.flattened_img_shape = th.prod(th.tensor(img_shape)).item()
@@ -97,7 +97,7 @@ class VanillaGAN1D(GANModels):
             return X.view(-1, *self.img_shape)
 
     class Discriminator(GANModels.Discriminator):
-        def __init__(self, img_shape, hidden_layers=[512, 256]):
+        def __init__(self, img_shape, hidden_layers=[512, 256], **kwargs):
             super().__init__(img_shape)
             self.flattened_img_shape = th.prod(th.tensor(img_shape)).item()
             self.hidden_layers = hidden_layers
