@@ -179,19 +179,21 @@ class DCGAN(GANModels):
 
     class Generator(GANModels.Generator):
         def __init__(self, img_shape: int, latent_dim: int = 100,
-                     hidden_channels: list = [256, 128, 64, 32], **kwargs):
+                     hidden_channels: list = [128, 64, 32], **kwargs):
             super().__init__(img_shape, latent_dim)
             self.hidden_channels = hidden_channels
             self.out_channels = self.img_shape[0]
 
             self._model_generator()
 
-        def conv_block(self, in_channels, out_channels, stride=2, normalize=True):
+        def conv_block(self, in_channels, out_channels, kernel_size=4,
+                       stride=2, padding=1, normalize=True):
             layers = [nn.ConvTranspose2d(
-                in_channels, out_channels, 4, stride, 1, bias=False)]
+                in_channels, out_channels, kernel_size, stride, padding,
+                bias=False)]
             if normalize:
                 layers.append(nn.BatchNorm2d(out_channels, eps=0.8))
-            layers.append(nn.ReLU(0.02, inplace=True))
+            layers.append(nn.ReLU(True))
             return nn.Sequential(*layers)
 
         def _model_generator(self):
@@ -199,7 +201,8 @@ class DCGAN(GANModels):
             for i, channels in enumerate(self.hidden_channels):
                 name = f'conv{i}'
                 layer = self.conv_block(input_channels, channels,
-                                        stride=1 if i == 0 else 2)
+                                        stride=1 if i == 0 else 2,
+                                        padding=0 if i == 0 else 1)
 
                 setattr(self, name, layer)
                 input_channels = channels
@@ -222,16 +225,18 @@ class DCGAN(GANModels):
             return X
 
     class Discriminator(GANModels.Discriminator):
-        def __init__(self, img_shape, hidden_channels=[32, 64, 128, 256], **kwargs):
+        def __init__(self, img_shape, hidden_channels=[64, 128, 256],
+                     kernel_size=4, **kwargs):
             super().__init__(img_shape)
             self.hidden_channels = hidden_channels
+            self.kernel_size = kernel_size
             self._model_generator()
 
         def conv_block(self, in_channels, out_channels,
                        activation=True, normalize=True):
 
             layers = [nn.Conv2d(in_channels, out_channels,
-                                4, 2, 1, bias=False)]
+                                self.kernel_size, 2, 1, bias=False)]
             if normalize:
                 layers.append(nn.BatchNorm2d(out_channels))
             if activation:
@@ -296,7 +301,7 @@ class DCGAN(GANModels):
         # Fake Loss
         z = th.randn(real.shape[0], self.latent_dim, device=self.device)
         self.gen_imgs = self.G(z)
-        preds = self.D(self.gen_img)
+        preds = self.D(self.gen_imgs)
 
         fake = th.ones_like(preds)
         loss = self.criterion(preds, fake)
@@ -468,7 +473,7 @@ class FMGAN2D(GANModels):
 class CGAN(VanillaGAN1D):
     class Generator(VanillaGAN1D.Generator):
         def __init__(self, img_shape: int, latent_dim: int, num_classes,
-                     hidden_layers: list = [512, 256]):
+                     hidden_layers: list = [128, 256, 512, 1024]):
             super().__init__(img_shape, latent_dim=latent_dim,
                              hidden_layers=hidden_layers)
 
@@ -483,7 +488,7 @@ class CGAN(VanillaGAN1D):
             return super().forward(noise)
 
     class Discriminator(VanillaGAN1D.Discriminator):
-        def __init__(self, img_shape, hidden_layers, num_classes):
+        def __init__(self, img_shape, num_classes, hidden_layers=[512, 256]):
             super().__init__(img_shape, hidden_layers=hidden_layers)
 
             self.num_classes = num_classes
@@ -499,7 +504,7 @@ class CGAN(VanillaGAN1D):
             return super().forward(imgs)
 
     def __init__(self, latent_dim, img_shape, num_classes, **model_args) -> None:
-        super().__init__(latent_dim, img_shape,  num_classes, **model_args)
+        super().__init__(latent_dim, img_shape,  **model_args)
 
         self.num_classes = num_classes
         self.criterion = nn.MSELoss()
@@ -508,9 +513,9 @@ class CGAN(VanillaGAN1D):
         real, _ = batch
         # Fake Loss
         z = th.randn(real.shape[0], self.latent_dim, device=self.device)
-        gen_labels = th.randint(10, (real.shape[0],), device=self.device)
-        self.gen_imgs = self.G(z, gen_labels)
-        preds = self.D(self.gen_imgs)
+        self.gen_labels = th.randint(10, (real.shape[0],), device=self.device)
+        self.gen_imgs = self.G(z, self.gen_labels)
+        preds = self.D(self.gen_imgs, self.gen_labels)
 
         valid = th.ones_like(preds, requires_grad=False)
         loss = self.criterion(preds, valid)
@@ -518,16 +523,19 @@ class CGAN(VanillaGAN1D):
         return loss
 
     def D_loss(self, batch):
-        real, _ = batch
+        real, labels = batch
         # Real Loss
         # Here preds -> Prediction whether real or fake
-        preds = self.D(real)
+        preds = self.D(real, labels)
 
         valid = th.ones_like(preds)
         real_loss = self.criterion(preds, valid)
 
         # Fake_loss
-        preds = self.D(self.gen_imgs)
+        z = th.randn(real.shape[0], self.latent_dim, device=self.device)
+        gen_labels = th.randint(10, (real.shape[0],), device=self.device)
+        gen_imgs = self.G(z, gen_labels)
+        preds = self.D(gen_imgs, gen_labels)
 
         fake = th.zeros_like(preds)
         fake_loss = self.criterion(preds, fake)

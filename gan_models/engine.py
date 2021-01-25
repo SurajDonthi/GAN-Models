@@ -13,7 +13,7 @@ from torch.optim.lr_scheduler import StepLR
 from torchvision.utils import make_grid
 
 # import all GAN models here.
-from models import VanillaGAN1D, FMGAN2D, DCGAN, WassersteinGAN
+from models import VanillaGAN1D, FMGAN2D, DCGAN, CGAN, WassersteinGAN, CramerGAN
 from utils import filtered_kwargs
 
 MODELS = {
@@ -21,7 +21,9 @@ MODELS = {
     'vanilla_gan': VanillaGAN1D,
     'dcgan': DCGAN,
     'feature_matching': FMGAN2D,
-    'wasserstein_gan': WassersteinGAN
+    'cgan': CGAN,
+    'wasserstein_gan': WassersteinGAN,
+    'cramer_gan': CramerGAN
 }
 
 OPTIMIZERS = {
