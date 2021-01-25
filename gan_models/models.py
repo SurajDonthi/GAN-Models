@@ -556,7 +556,7 @@ class WassersteinGAN(GANModels):
     def D_loss(self, batch):
         # Clip weights at (before or after doesn't make a diff) every iteration
         for p in self.D.parameters():
-        p.data.clamp_(-self.clip_value, self.clip_value)
+            p.data.clamp_(-self.clip_value, self.clip_value)
 
         # Real
         real, _ = batch

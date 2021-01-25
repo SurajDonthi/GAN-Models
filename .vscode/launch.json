@@ -67,7 +67,7 @@
       ]
     },
     {
-      "name": "Debugging - CIFAR10 Feature Matching",
+      "name": "Debugging - CIFAR10 Feature Matching GAN",
       "type": "python",
       "request": "launch",
       "program": "${workspaceFolder}/gan_models/train.py",
