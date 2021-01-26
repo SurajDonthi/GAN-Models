@@ -45,7 +45,7 @@ class TorchDataLoader(pl.LightningDataModule):
     def __init__(self, data_dir: str,
                  dataset: Literal[tuple(DATASETS.keys())] = 'mnist',
                  train: bool = True,
-                 download: bool = False,
+                 download: bool = True,
                  train_batchsize: int = 32,
                  num_workers: int = 4,
                  ):
