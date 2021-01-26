@@ -472,7 +472,7 @@ class FMGAN2D(GANModels):
 
 class CGAN(VanillaGAN1D):
     class Generator(VanillaGAN1D.Generator):
-        def __init__(self, img_shape: int, latent_dim: int, num_classes,
+        def __init__(self, img_shape: int, latent_dim: int, num_classes: int,
                      hidden_layers: list = [128, 256, 512, 1024]):
             super().__init__(img_shape, latent_dim=latent_dim,
                              hidden_layers=hidden_layers)
@@ -626,22 +626,23 @@ class CramerGAN(GANModels):
         fake_preds2 = self.D(self.gen_imgs)
 
         self.g_loss = th.mean(
-            self.critic(real_preds - fake_preds1) -
-            self.critic(fake_preds1 - fake_preds2)
+            self.critic(real_preds, fake_preds1) -
+            self.critic(fake_preds1, fake_preds2)
         )
 
         return self.g_loss
 
     def calc_gradient_penalty(self, real, fake, fake_preds):
-        alpha = th.rand(real.shape[0], [1] *
-                        len(real.shape[1:]), device=self.device)
+        alpha = th.rand(real.shape[0], *((1,) * len(real.shape[1:])),
+                        device=self.device)
         alpha = alpha.expand_as(real)
 
         interpolates = alpha * real + (1 - alpha) * fake
+        interpolates.requires_grad_(True)
 
         d_interpolates = self.critic(self.D(interpolates), fake_preds)
 
-        grad_outputs = th.ones_like(d_interpolates)
+        grad_outputs = th.ones_like(d_interpolates, requires_grad=True)
 
         gradients = th.autograd.grad(outputs=d_interpolates,
                                      inputs=interpolates,
@@ -660,11 +661,11 @@ class CramerGAN(GANModels):
 
         z1 = th.randn(real.shape[0], self.latent_dim, device=self.device)
         fake1 = self.G(z1)
-        fake_preds1 = self.D()
+        fake_preds1 = self.D(fake1)
 
         z2 = th.randn(real.shape[0], self.latent_dim, device=self.device)
         fake2 = self.G(z2)
-        fake_preds2 = self.D(self.gen_imgs)
+        fake_preds2 = self.D(fake2)
 
         surrogate = th.mean(
             self.critic(real_preds, fake_preds2) -

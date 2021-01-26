@@ -245,14 +245,13 @@ class Engine(pl.LightningModule):
     def on_train_epoch_end(self, outputs) -> None:
 
         z = th.randn(64, self.hparams.latent_dim, device=self.device)
+        if any(arg in self.G.forward.__code__.co_varnames
+               for arg in ['labels', 'y', 'label', 'Y']):
+            gen_labels = th.randint(10, (64,), device=self.device)
+            gen_imgs = self.G(z, gen_labels)
+        else:
+            gen_imgs = self.G(z)
 
         self.logger.experiment.add_image(
-            'Generated Images', make_grid(self.G(z)),
-            self.current_epoch
-        )
-
-    def get_progress_bar_dict(self):
-        # don't show the version number
-        items = super().get_progress_bar_dict()
-        items.pop("v_num", None)
-        return items
+            'Generated Images', make_grid(gen_imgs),
+            self.current_epoch)

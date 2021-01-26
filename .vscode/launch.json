@@ -226,6 +226,8 @@
       "args": [
         "--model",
         "cramer_gan",
+        "--model_args",
+        "{\\\"model_type\\\":\\\"mlp\\\"}",
         "--data_dir",
         "data/",
         // "--dataset",
