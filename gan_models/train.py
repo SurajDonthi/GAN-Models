@@ -38,7 +38,7 @@ def main(args):
                                      #  save_top_k=1
                                      )
 
-    data_loader = TorchDataLoader.from_argparse_args(args, dataset='cifar10')
+    data_loader = TorchDataLoader.from_argparse_args(args)
 
     img_shape = data_loader.train_data[0][0].shape
 

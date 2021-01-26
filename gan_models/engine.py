@@ -1,21 +1,20 @@
 import inspect
-from argparse import ArgumentParser, Namespace
-from typing import Any, List, Optional, Tuple, Union, Literal
 import json
+from argparse import ArgumentParser, Namespace
+from typing import Any, List, Literal, Optional, Tuple, Union
 
 import pytorch_lightning as pl
 import torch as th
 import torch.nn.functional as F
 from pytorch_lightning.metrics.functional import accuracy
 from pytorch_lightning.utilities import parsing
-from torch.optim import RMSprop, SGD, Adam
+from torch.optim import SGD, Adam, RMSprop
 from torch.optim.lr_scheduler import StepLR
 from torchvision.utils import make_grid
 
 # import all GAN models here.
 from models import MODELS
 from utils import filtered_kwargs
-
 
 OPTIMIZERS = {
     'sgd': SGD,
