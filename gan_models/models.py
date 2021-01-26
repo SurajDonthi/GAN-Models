@@ -694,3 +694,14 @@ class BigGAN(GANModels):
     def __init__(self) -> None:
         self.D = None
         self.G = None
+
+
+MODELS = {
+    'gan': VanillaGAN1D,
+    'vanilla_gan': VanillaGAN1D,
+    'dcgan': DCGAN,
+    'feature_matching': FMGAN2D,
+    'cgan': CGAN,
+    'wgan': WassersteinGAN,
+    'cramer_gan': CramerGAN
+}
