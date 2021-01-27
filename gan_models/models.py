@@ -309,6 +309,107 @@ class DCGAN(GANModels):
         return loss
 
 
+class DCGANMNIST(DCGAN):
+    class Generator(GANModels.Generator):
+        def __init__(self, img_shape, latent_dim,
+                     hidden_channels=[512, 256, 128], **kwargs):
+            super().__init__(img_shape, latent_dim, **kwargs)
+
+            self.hidden_layers = hidden_channels
+
+            self._model_generator()
+
+        def conv_block(self, in_channels, out_channels, kernel_size=4,
+                       stride=2, padding=1, normalize=True, activation=True):
+            layers = [nn.ConvTranspose2d(
+                in_channels, out_channels, kernel_size, stride, padding,
+                bias=False)]
+            if normalize:
+                layers.append(nn.BatchNorm2d(out_channels, eps=0.8))
+            layers.append(nn.LeakyReLU(0.02, True))
+            return nn.Sequential(*layers)
+
+        def _model_generator(self):
+
+            self.linear = nn.Sequential(*[
+                nn.Linear(self.latent_dim, self.hidden_layers[0] * 7 * 7),
+                nn.LeakyReLU(0.02, True)
+            ])
+            # h0 x 7 x 7 -> h1 x 14 x 14
+            self.conv1 = self.conv_block(self.hidden_layers[0],
+                                         self.hidden_layers[1],
+                                         normalize=False)
+            # h1 x 14 x 14 -> h2 x 15 x 15
+            self.conv2 = self.conv_block(self.hidden_layers[1],
+                                         self.hidden_layers[2],
+                                         kernel_size=3,
+                                         stride=1,
+                                         padding=1,
+                                         normalize=True)
+            # h2 x 15 x 15 -> 1 x 30 x 30
+            self.conv3 = nn.Sequential(*[
+                nn.ConvTranspose2d(self.hidden_layers[2], 1, 4, 2, 1),
+                nn.Tanh()
+            ])
+
+        def forward(self, X):
+            # X -> noise
+            X = self.linear(X)
+            X = X.view(-1, self.hidden_layers[0], 7, 7)
+            X = self.conv1(X)
+            X = self.conv2(X)
+            X = self.conv3(X)
+
+            return X
+
+    class Discriminator(GANModels.Discriminator):
+        def __init__(self, img_shape, hidden_channels=[128, 256, 512],
+                     kernel_size=4, **kwargs):
+            super().__init__(img_shape)
+            self.hidden_channels = hidden_channels
+            self.kernel_size = kernel_size
+            self._model_generator()
+
+        def conv_block(self, in_channels, out_channels,
+                       activation=True, normalize=True):
+
+            layers = [nn.Conv2d(in_channels, out_channels,
+                                self.kernel_size, 2, 1, bias=False)]
+            if normalize:
+                layers.append(nn.BatchNorm2d(out_channels))
+            if activation:
+                layers.append(nn.LeakyReLU(0.02, inplace=True))
+            return nn.Sequential(*layers)
+
+        def _model_generator(self):
+            in_channels = self.img_shape[0]
+            layer_dim = [1] + list(self.img_shape)
+            for i, channels in enumerate(self.hidden_channels):
+                name = f'conv{i}'
+
+                layer = self.conv_block(in_channels, channels,
+                                        activation=False if i == len(
+                                            self.hidden_channels)-1 else True,
+                                        normalize=False if i == 0 else True)
+
+                setattr(self, name, layer)
+                in_channels = channels
+
+            self.final = nn.Conv2d(in_channels, 1, 3, 1, 0, bias=False)
+
+        def forward(self, X):
+
+            for i, _ in enumerate(self.hidden_channels):
+                name = f'conv{i}'
+                conv = getattr(self, name)
+                X = conv(X)
+
+            X = self.final(X)
+            X = F.sigmoid(X)
+
+            return X.view(-1)
+
+
 class FMGAN2D(GANModels):
     """
     Implements Feature Matching and semi-supervised learning for DCGAN model.
@@ -700,6 +801,7 @@ MODELS = {
     'gan': VanillaGAN1D,
     'vanilla_gan': VanillaGAN1D,
     'dcgan': DCGAN,
+    'dcgan_mnist': DCGANMNIST,
     'feature_matching': FMGAN2D,
     'cgan': CGAN,
     'wgan': WassersteinGAN,

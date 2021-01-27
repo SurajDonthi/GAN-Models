@@ -1,4 +1,6 @@
 import csv
+import math
+import numpy as np
 from argparse import Namespace, ArgumentTypeError
 from pathlib2 import Path
 
@@ -25,6 +27,61 @@ def str2bool(v):
 def filtered_kwargs(func, **kwargs):
     return {key: value for key, value in kwargs.items()
             if key in func.__code__.co_varnames}
+
+
+def is_power_of_2(x):
+    assert isinstance(x, int), f"The value passed must be of \
+        type int but got {type(x)}"
+    return math.ceil(math.log2(x)) == math.floor(math.log2(x))
+
+
+def calc_factors_prod(n):
+    """
+    Calculates the product of factors not divisible by two.
+
+    Args:
+        n (int): Integer to calculate factor product
+
+    Returns:
+        int: Returns the minimal product of factors not divisible by 2.
+    """
+    assert isinstance(n, int), \
+        f"The value passed must be of type int but got type {type(n)}"
+    nums = []
+    for i in range(2, n + 1):
+        while n % i == 0:
+            nums.append(i)
+            n = n / i
+        if n == 1:
+            break
+    nums = list(filter((2).__ne__, nums))
+    return np.prod(nums)
+
+
+def get_min_size(img_shape):
+    """
+    Returns the minimum size not divisible by 2. 
+    If the size is fully divisible by 2, it returns False.
+
+    Args:
+    img_shape (tuple | list | torch.Size): Image of the shape (C, H, W).
+
+    Returns:
+        bool| tuple : Returns minimum size (H, W) \
+            non-divisible by 2. 
+            Returns False if the image size (H, W) is a power of 2.
+    """
+    # Channels are not required!
+    img_shape = list(img_shape)
+    img_shape.pop(0)
+    assert img_shape[0] == img_shape[1],\
+        f"Image height and width must be the same!! \
+            Got height {img_shape[0]} and width {img_shape[1]}."
+
+    if is_power_of_2(img_shape[0]):
+        return False
+
+    return calc_factors_prod(img_shape[0]), calc_factors_prod(img_shape[0])
 
 
 class UnNormalize(object):
