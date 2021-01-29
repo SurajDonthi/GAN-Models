@@ -6,11 +6,11 @@ from typing import Any, List, Literal, Optional, Tuple, Union
 import pytorch_lightning as pl
 import torch as th
 import torch.nn.functional as F
+from torchvision.utils import make_grid
 from pytorch_lightning.metrics.functional import accuracy
 from pytorch_lightning.utilities import parsing
 from torch.optim import SGD, Adam, RMSprop
 from torch.optim.lr_scheduler import StepLR
-from torchvision.utils import make_grid
 
 # import all GAN models here.
 from models import MODELS
