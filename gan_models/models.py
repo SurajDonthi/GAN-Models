@@ -315,7 +315,7 @@ class DCGANMNIST(DCGAN):
                      hidden_channels=[512, 256, 128], **kwargs):
             super().__init__(img_shape, latent_dim, **kwargs)
 
-            self.hidden_layers = hidden_channels
+            self.hidden_channels = hidden_channels
 
             self._model_generator()
 
@@ -332,30 +332,30 @@ class DCGANMNIST(DCGAN):
         def _model_generator(self):
 
             self.linear = nn.Sequential(*[
-                nn.Linear(self.latent_dim, self.hidden_layers[0] * 7 * 7),
+                nn.Linear(self.latent_dim, self.hidden_channels[0] * 7 * 7),
                 nn.LeakyReLU(0.02, True)
             ])
             # h0 x 7 x 7 -> h1 x 14 x 14
-            self.conv1 = self.conv_block(self.hidden_layers[0],
-                                         self.hidden_layers[1],
+            self.conv1 = self.conv_block(self.hidden_channels[0],
+                                         self.hidden_channels[1],
                                          normalize=False)
             # h1 x 14 x 14 -> h2 x 15 x 15
-            self.conv2 = self.conv_block(self.hidden_layers[1],
-                                         self.hidden_layers[2],
+            self.conv2 = self.conv_block(self.hidden_channels[1],
+                                         self.hidden_channels[2],
                                          kernel_size=3,
                                          stride=1,
                                          padding=1,
                                          normalize=True)
             # h2 x 15 x 15 -> 1 x 30 x 30
             self.conv3 = nn.Sequential(*[
-                nn.ConvTranspose2d(self.hidden_layers[2], 1, 4, 2, 1),
+                nn.ConvTranspose2d(self.hidden_channels[2], 1, 4, 2, 1),
                 nn.Tanh()
             ])
 
         def forward(self, X):
             # X -> noise
             X = self.linear(X)
-            X = X.view(-1, self.hidden_layers[0], 7, 7)
+            X = X.view(-1, self.hidden_channels[0], 7, 7)
             X = self.conv1(X)
             X = self.conv2(X)
             X = self.conv3(X)
