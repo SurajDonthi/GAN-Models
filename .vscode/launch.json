@@ -185,7 +185,7 @@
       ]
     },
     {
-      "name": "Debugging - CIFAR10 CGAN",
+      "name": "Debugging - CGAN",
       "type": "python",
       "request": "launch",
       "program": "${workspaceFolder}/gan_models/train.py",
@@ -203,7 +203,7 @@
         "--download",
         "True",
         "--description",
-        "Testing CGAN with CIFAR 10.",
+        "Testing CGAN with MNIST.",
         "--weights_summary",
         "full",
         // "--train_batchsize",
