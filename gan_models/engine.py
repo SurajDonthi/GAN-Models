@@ -6,11 +6,11 @@ from typing import Any, List, Literal, Optional, Tuple, Union
 import pytorch_lightning as pl
 import torch as th
 import torch.nn.functional as F
-from torchvision.utils import make_grid
 from pytorch_lightning.metrics.functional import accuracy
 from pytorch_lightning.utilities import parsing
 from torch.optim import SGD, Adam, RMSprop
 from torch.optim.lr_scheduler import StepLR
+from torchvision.utils import make_grid, save_image
 
 # import all GAN models here.
 from models import MODELS
@@ -36,7 +36,8 @@ class Engine(pl.LightningModule):
                  optimizer_options: Optional[dict] = {
                      'optim': 'adam', 'args': {'betas': (0.5, 0.999)}},
                  scheduler_options: Optional[dict] = None,
-                 model_args: Optional[dict] = None
+                 model_args: Optional[dict] = None,
+                 save_gen_imgs: bool = True
                  ):
 
         super().__init__()
@@ -245,3 +246,10 @@ class Engine(pl.LightningModule):
         self.logger.experiment.add_image(
             'Generated Images', make_grid(gen_imgs),
             self.current_epoch)
+
+        if self.hparams.save_gen_imgs:
+            save_image(gen_imgs,
+                       self.trainer.logger.save_dir +
+                       f'/version_{self.trainer.logger.version}/media' +
+                       f'/epoch_{self.current_epoch}.png'
+                       )
