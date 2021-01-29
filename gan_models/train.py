@@ -24,18 +24,16 @@ def main(args):
                                )
     tt_logger.experiment
 
-    # tb_logger = TensorBoardLogger(
-    #     save_dir=args.log_path, name="", version=tt_logger.version)
-
     log_dir = Path(tt_logger.save_dir) / f"version_{tt_logger.version}"
 
     checkpoint_dir = log_dir / "checkpoints"
     os.makedirs(checkpoint_dir, exist_ok=True)
     chkpt_callback = ModelCheckpoint(checkpoint_dir,
-                                     #  monitor='val_loss',
+                                     monitor='Loss/d_loss_epoch',
                                      save_last=True,
-                                     #  mode='min',
-                                     #  save_top_k=1
+                                     mode='auto',
+                                     save_top_k=5,
+                                     period=5
                                      )
 
     data_loader = TorchDataLoader.from_argparse_args(args)
@@ -51,7 +49,6 @@ def main(args):
                                          )
 
     trainer.fit(model, data_loader)
-    # trainer.test(model)
 
 
 if __name__ == "__main__":

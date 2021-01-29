@@ -573,7 +573,7 @@ class FMGAN2D(GANModels):
 class CGAN(VanillaGAN1D):
     class Generator(VanillaGAN1D.Generator):
         def __init__(self, img_shape: int, latent_dim: int, num_classes: int,
-                     hidden_layers: list = [128, 256, 512, 1024]):
+                     hidden_layers: list = [256, 512, 1024]):
             super().__init__(img_shape, latent_dim=latent_dim,
                              hidden_layers=hidden_layers)
 
