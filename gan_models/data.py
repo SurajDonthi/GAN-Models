@@ -74,7 +74,7 @@ class TorchDataLoader(pl.LightningDataModule):
 
         self.train_transforms = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Normalize(**MEAN_N_STD[self.dataset])
+            # transforms.Normalize(**MEAN_N_STD[self.dataset])
         ])
 
         if self.dataset == 'caltech101':

@@ -33,7 +33,7 @@ def main(args):
     os.makedirs(checkpoint_dir, exist_ok=True)
     chkpt_callback = ModelCheckpoint(checkpoint_dir,
                                      #  monitor='val_loss',
-                                     #  save_last=True,
+                                     save_last=True,
                                      #  mode='min',
                                      #  save_top_k=1
                                      )

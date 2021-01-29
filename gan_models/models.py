@@ -288,7 +288,7 @@ class DCGAN(GANModels):
         z = th.randn(real.shape[0], self.latent_dim, device=self.device)
         preds = self.D(self.G(z))
 
-        fake = th.ones_like(preds)
+        fake = th.zeros_like(preds)
         fake_loss = self.criterion(preds, fake)
 
         loss = real_loss + fake_loss
@@ -383,7 +383,6 @@ class DCGANMNIST(DCGAN):
 
         def _model_generator(self):
             in_channels = self.img_shape[0]
-            layer_dim = [1] + list(self.img_shape)
             for i, channels in enumerate(self.hidden_channels):
                 name = f'conv{i}'
 
