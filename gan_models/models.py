@@ -651,7 +651,7 @@ class CGAN(VanillaGAN1D):
 class CGAN2D(CGAN):
     class Generator(DCGAN.Generator):
         def __init__(self, img_shape: int, latent_dim: int, num_classes: int,
-                     hidden_channels: list = [256, 512, 1024], **kwargs):
+                     hidden_channels: list = [256, 128, 64], **kwargs):
             super().__init__(img_shape, latent_dim=latent_dim,
                              hidden_channels=hidden_channels, **kwargs)
 
