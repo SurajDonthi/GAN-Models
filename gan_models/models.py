@@ -695,7 +695,8 @@ class CGAN2D(CGAN):
 
 
 class WassersteinGAN(GANModels):
-    BASE_MODELS = {'mlp': VanillaGAN1D, 'dcgan': DCGAN, 'dcgan_mnist': DCGANMNIST}
+    BASE_MODELS = {'mlp': VanillaGAN1D,
+                   'dcgan': DCGAN, 'dcgan_mnist': DCGANMNIST}
 
     def __init__(self, latent_dim, img_shape, clip_value=0.01, **model_args) -> None:
         super().__init__(latent_dim, img_shape, **model_args)
