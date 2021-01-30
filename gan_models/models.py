@@ -1,6 +1,7 @@
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
+import math
 from abc import ABC, abstractmethod
 
 from utils import filtered_kwargs
@@ -184,6 +185,8 @@ class DCGAN(GANModels):
             self.hidden_channels = hidden_channels
             self.out_channels = self.img_shape[0]
 
+            self.input_channels = self.latent_dim
+
             self._model_generator()
 
         def conv_block(self, in_channels, out_channels, kernel_size=4,
@@ -197,7 +200,7 @@ class DCGAN(GANModels):
             return nn.Sequential(*layers)
 
         def _model_generator(self):
-            input_channels = self.latent_dim
+            input_channels = self.input_channels
             for i, channels in enumerate(self.hidden_channels):
                 name = f'conv{i}'
                 layer = self.conv_block(input_channels, channels,
@@ -214,7 +217,7 @@ class DCGAN(GANModels):
             ])
 
         def forward(self, X):
-            X = X.view(-1, self.latent_dim, 1, 1)
+            X = X.view(-1, self.input_channels, 1, 1)
             for i, _ in enumerate(self.hidden_channels):
                 name = f'conv{i}'
                 conv = getattr(self, name)
@@ -230,6 +233,7 @@ class DCGAN(GANModels):
             super().__init__(img_shape)
             self.hidden_channels = hidden_channels
             self.kernel_size = kernel_size
+            self.in_channels = self.img_shape[0]
             self._model_generator()
 
         def conv_block(self, in_channels, out_channels,
@@ -244,8 +248,7 @@ class DCGAN(GANModels):
             return nn.Sequential(*layers)
 
         def _model_generator(self):
-            in_channels = self.img_shape[0]
-            layer_dim = [1] + list(self.img_shape)
+            in_channels = self.in_channels
             for i, channels in enumerate(self.hidden_channels):
                 name = f'conv{i}'
 
@@ -607,7 +610,7 @@ class CGAN(VanillaGAN1D):
         super().__init__(latent_dim, img_shape,  **model_args)
 
         self.num_classes = num_classes
-        self.criterion = nn.MSELoss()
+        self.criterion = nn.BCELoss()
 
     def G_loss(self, batch):
         real, _ = batch
@@ -643,6 +646,52 @@ class CGAN(VanillaGAN1D):
         loss = (real_loss + fake_loss) / 2
 
         return loss
+
+
+class CGAN2D(CGAN):
+    class Generator(DCGAN.Generator):
+        def __init__(self, img_shape: int, latent_dim: int, num_classes: int,
+                     hidden_channels: list = [256, 512, 1024], **kwargs):
+            super().__init__(img_shape, latent_dim=latent_dim,
+                             hidden_channels=hidden_channels, **kwargs)
+
+            self.num_classes = num_classes
+            self.input_channels = self.latent_dim + self.num_classes
+            self._model_generator()
+
+            self.embeddings = nn.Embedding(num_classes, num_classes)
+
+        def forward(self, noise, labels):
+            noise = th.cat((noise, self.embeddings(labels)), dim=-1)
+
+            return super().forward(noise)
+
+    class Discriminator(DCGAN.Discriminator):
+        def __init__(self, img_shape, num_classes,
+                     hidden_channels=[64, 128, 256], kernel_size=4, **kwargs):
+            super().__init__(img_shape, hidden_channels=hidden_channels,
+                             kernel_size=kernel_size, **kwargs)
+
+            self.num_classes = num_classes
+
+            self.label_channels = 1
+            if num_classes > (flattened_shape := img_shape[1] * img_shape[2]):
+                self.label_channels += 1
+            self.in_channels = self.img_shape[0] + self.label_channels
+
+            self._model_generator()
+
+            self.embeddings = nn.Embedding(num_classes, num_classes)
+            self.fc = nn.Linear(
+                num_classes, flattened_shape * self.label_channels)
+
+        def forward(self, imgs, labels):
+            labels = self.embeddings(labels)
+            labels = self.fc(labels)
+            labels = labels.view(-1, self.label_channels, imgs.shape[2],
+                                 imgs.shape[3])
+            imgs = th.cat((imgs, labels), dim=1)
+            return super().forward(imgs)
 
 
 class WassersteinGAN(GANModels):
@@ -803,6 +852,7 @@ MODELS = {
     'dcgan_mnist': DCGANMNIST,
     'feature_matching': FMGAN2D,
     'cgan': CGAN,
+    'cgan2d': CGAN2D,
     'wgan': WassersteinGAN,
     'cramer_gan': CramerGAN
 }
