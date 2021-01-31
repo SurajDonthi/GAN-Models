@@ -98,7 +98,7 @@ class VanillaGAN1D(GANModels):
             return X.view(-1, *self.img_shape)
 
     class Discriminator(GANModels.Discriminator):
-        def __init__(self, img_shape, hidden_layers=[512, 256], **kwargs):
+        def __init__(self, img_shape, hidden_layers=[512, 256, 128], **kwargs):
             super().__init__(img_shape)
             self.flattened_img_shape = th.prod(th.tensor(img_shape)).item()
             self.hidden_layers = hidden_layers
@@ -180,7 +180,7 @@ class DCGAN(GANModels):
 
     class Generator(GANModels.Generator):
         def __init__(self, img_shape: int, latent_dim: int = 100,
-                     hidden_channels: list = [128, 64, 32], **kwargs):
+                     hidden_channels: list = [256, 128, 64], **kwargs):
             super().__init__(img_shape, latent_dim)
             self.hidden_channels = hidden_channels
             self.out_channels = self.img_shape[0]
@@ -835,15 +835,11 @@ class InfoGAN(GANModels):
 
 
 class CycleGAN(GANModels):
-    def __init__(self) -> None:
-        self.D = None
-        self.G = None
+    pass
 
 
 class BigGAN(GANModels):
-    def __init__(self) -> None:
-        self.D = None
-        self.G = None
+    pass
 
 
 MODELS = {
