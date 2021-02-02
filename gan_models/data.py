@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 from pathlib2 import Path
 from pytorch_lightning.utilities import parsing
 from torch.utils.data import DataLoader, Dataset
-from torchvision.datasets import CIFAR10, MNIST, Caltech101, FashionMNIST
+from torchvision.datasets import CIFAR10, MNIST, Caltech101, FashionMNIST, CelebA
 from torchvision.transforms import transforms
 
 # from utils import filtered_kwargs
@@ -31,6 +31,7 @@ DATASETS = {
     'fashion-mnist': FashionMNIST,
     'caltech101': Caltech101,
     'cifar10': CIFAR10,
+    'celeba': CelebA
 }
 MEAN_N_STD = {
     'mnist': {'mean': (0.1307,), 'std': (0.3081,)},

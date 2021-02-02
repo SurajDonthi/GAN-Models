@@ -1,7 +1,6 @@
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
-import math
 from abc import ABC, abstractmethod
 
 from utils import filtered_kwargs
@@ -417,85 +416,22 @@ class FMGAN2D(GANModels):
     Implements Feature Matching and semi-supervised learning for DCGAN model.
     """
 
-    class Generator(GANModels.Generator):
-        def __init__(self, img_shape: int, latent_dim: int = 100,
-                     #  normalize: bool = False,
-                     hidden_channels: list = [256, 128, 64, 32], **kwargs):
-            super().__init__(img_shape, latent_dim)
-            self.hidden_channels = hidden_channels
-            self.out_channels = self.img_shape[0]
-
-            self._model_generator()
-
-        def conv_block(self, in_channels, out_channels, normalize=True):
-            layers = [nn.ConvTranspose2d(
-                in_channels, out_channels, 4, 2, 1, bias=False)]
-            if normalize:
-                layers.append(nn.BatchNorm2d(out_channels, eps=0.8))
-            layers.append(nn.LeakyReLU(0.02, inplace=True))
-            return nn.Sequential(*layers)
-
-        def _model_generator(self):
-            input_channels = self.latent_dim
-            for i, channels in enumerate(self.hidden_channels):
-                name = f'conv{i}'
-                layer = self.conv_block(input_channels, channels,
-                                        normalize=False if i == 0 else True)
-
-                setattr(self, name, layer)
-                input_channels = channels
-
-            self.final = nn.Sequential(*[
-                nn.ConvTranspose2d(
-                    input_channels, self.out_channels, 4, 2, 1, bias=False),
-                nn.Tanh()
-            ])
-
-        def forward(self, X):
-            X = X.view(-1, self.latent_dim, 1, 1)
-            for i, _ in enumerate(self.hidden_channels):
-                name = f'conv{i}'
-                conv = getattr(self, name)
-                X = conv(X)
-
-            X = self.final(X)
-
-            return X
-
-    class Discriminator(GANModels.Discriminator):
-        def __init__(self, img_shape, hidden_channels=[32, 64, 128, 256], **kwargs):
+    class Discriminator(DCGANMNIST.Discriminator):
+        def __init__(self, img_shape, hidden_channels=[128, 256, 512], **kwargs):
             super().__init__(img_shape)
-            self.hidden_channels = hidden_channels
             self._model_generator()
-
-        def conv_block(self, in_channels, out_channels,
-                       activation=True, normalize=True):
-
-            layers = [nn.Conv2d(in_channels, out_channels,
-                                4, 2, 1, bias=False)]
-            if normalize:
-                layers.append(nn.BatchNorm2d(out_channels))
-            if activation:
-                layers.append(nn.LeakyReLU(0.02, inplace=True))
-            return nn.Sequential(*layers)
 
         def get_output_shape(self, model, image_dim):
             return model(th.rand(*(image_dim))).data.shape
 
         def _model_generator(self):
-            in_channels = self.img_shape[0]
+            super()._model_generator()
+            # Get sizes of features at each layer
             layer_dim = [1] + list(self.img_shape)
             for i, channels in enumerate(self.hidden_channels):
                 name = f'conv{i}'
-
-                layer = self.conv_block(in_channels, channels,
-                                        activation=False if i == len(
-                                            self.hidden_channels)-1 else True,
-                                        normalize=False if i == 0 else True)
+                layer = getattr(self, name)
                 layer_dim = self.get_output_shape(layer, layer_dim)
-
-                setattr(self, name, layer)
-                in_channels = channels
 
             self.layer_dim = th.prod(th.tensor(layer_dim)).item()
             self.final = nn.Linear(self.layer_dim, 10)
@@ -508,15 +444,19 @@ class FMGAN2D(GANModels):
                 X = conv(X)
 
             feature = X.view(-1, self.layer_dim)
-            X = self.final(feature)
             if feature_matching:
                 return feature
 
-            # X = F.sigmoid(self.final(X))
+            X = self.final(feature)
+            # X = F.sigmoid(X)
             return X
 
     def __init__(self, latent_dim, img_shape, **model_args) -> None:
         super().__init__(latent_dim, img_shape, **model_args)
+
+        self.G = DCGANMNIST.Generator(img_shape, latent_dim,
+                                      **model_args['generator'])
+
         self.g_criterion = nn.MSELoss()
         self.d_criterion = nn.CrossEntropyLoss()
 
