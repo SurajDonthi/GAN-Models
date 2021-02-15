@@ -1,18 +1,18 @@
 import os
 from argparse import ArgumentParser
 
+import torch as th
 from pathlib2 import Path
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.loggers import TestTubeLogger
-import torch as th
 from torch.utils.data import ConcatDataset, DataLoader
 from torchvision import transforms
 from torchvision.datasets import CIFAR10, MNIST, FashionMNIST
 
-from data import TorchDataLoader
-from engine import Engine
-from utils import save_args
+from gan_models.data import TorchDataLoader
+from gan_models.engine import Engine
+from gan_models.utils import save_args
 
 
 def main(args):

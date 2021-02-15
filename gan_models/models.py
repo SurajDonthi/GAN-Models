@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from abc import ABC, abstractmethod
 
-from utils import filtered_kwargs
+from gan_models.utils import filtered_kwargs
 
 
 class GANModels(ABC):
@@ -184,7 +184,7 @@ class DCGAN(GANModels):
             self.hidden_channels = hidden_channels
             self.out_channels = self.img_shape[0]
 
-            self.input_channels = self.latent_dim
+            self.__input_channels = self.latent_dim
 
             self._model_generator()
 
@@ -195,11 +195,11 @@ class DCGAN(GANModels):
                 bias=False)]
             if normalize:
                 layers.append(nn.BatchNorm2d(out_channels, eps=0.8))
-            layers.append(nn.ReLU(True))
+            layers.append(nn.LeakyReLU(0.02, True))
             return nn.Sequential(*layers)
 
         def _model_generator(self):
-            input_channels = self.input_channels
+            input_channels = self.__input_channels
             for i, channels in enumerate(self.hidden_channels):
                 name = f'conv{i}'
                 layer = self.conv_block(input_channels, channels,
@@ -312,24 +312,12 @@ class DCGAN(GANModels):
 
 
 class DCGANMNIST(DCGAN):
-    class Generator(GANModels.Generator):
+    class Generator(DCGAN.Generator):
         def __init__(self, img_shape, latent_dim,
                      hidden_channels=[512, 256, 128], **kwargs):
-            super().__init__(img_shape, latent_dim, **kwargs)
-
-            self.hidden_channels = hidden_channels
+            super().__init__(img_shape, latent_dim, hidden_channels, **kwargs)
 
             self._model_generator()
-
-        def conv_block(self, in_channels, out_channels, kernel_size=4,
-                       stride=2, padding=1, normalize=True, activation=True):
-            layers = [nn.ConvTranspose2d(
-                in_channels, out_channels, kernel_size, stride, padding,
-                bias=False)]
-            if normalize:
-                layers.append(nn.BatchNorm2d(out_channels, eps=0.8))
-            layers.append(nn.LeakyReLU(0.02, True))
-            return nn.Sequential(*layers)
 
         def _model_generator(self):
 
@@ -338,77 +326,42 @@ class DCGANMNIST(DCGAN):
                 nn.LeakyReLU(0.02, True)
             ])
             # h0 x 7 x 7 -> h1 x 14 x 14
-            self.conv1 = self.conv_block(self.hidden_channels[0],
+            self.conv0 = self.conv_block(self.hidden_channels[0],
                                          self.hidden_channels[1],
                                          normalize=False)
             # h1 x 14 x 14 -> h2 x 15 x 15
-            self.conv2 = self.conv_block(self.hidden_channels[1],
+            self.conv1 = self.conv_block(self.hidden_channels[1],
                                          self.hidden_channels[2],
                                          kernel_size=3,
                                          stride=1,
                                          padding=1,
                                          normalize=True)
             # h2 x 15 x 15 -> 1 x 30 x 30
-            self.conv3 = nn.Sequential(*[
+            self.conv2 = nn.Sequential(*[
                 nn.ConvTranspose2d(self.hidden_channels[2], 1, 4, 2, 1),
                 nn.Tanh()
             ])
+
+            del self.final
 
         def forward(self, X):
             # X -> noise
             X = self.linear(X)
             X = X.view(-1, self.hidden_channels[0], 7, 7)
-            X = self.conv1(X)
-            X = self.conv2(X)
-            X = self.conv3(X)
-
-            return X
-
-    class Discriminator(GANModels.Discriminator):
-        def __init__(self, img_shape, hidden_channels=[128, 256, 512],
-                     kernel_size=4, **kwargs):
-            super().__init__(img_shape)
-            self.hidden_channels = hidden_channels
-            self.kernel_size = kernel_size
-            self._model_generator()
-
-        def conv_block(self, in_channels, out_channels,
-                       activation=True, normalize=True):
-
-            layers = [nn.Conv2d(in_channels, out_channels,
-                                self.kernel_size, 2, 1, bias=False)]
-            if normalize:
-                layers.append(nn.BatchNorm2d(out_channels))
-            if activation:
-                layers.append(nn.LeakyReLU(0.02, inplace=True))
-            return nn.Sequential(*layers)
-
-        def _model_generator(self):
-            in_channels = self.img_shape[0]
-            for i, channels in enumerate(self.hidden_channels):
-                name = f'conv{i}'
-
-                layer = self.conv_block(in_channels, channels,
-                                        activation=False if i == len(
-                                            self.hidden_channels)-1 else True,
-                                        normalize=False if i == 0 else True)
-
-                setattr(self, name, layer)
-                in_channels = channels
-
-            self.final = nn.Conv2d(in_channels, 1, 3, 1, 0, bias=False)
-
-        def forward(self, X):
 
             for i, _ in enumerate(self.hidden_channels):
                 name = f'conv{i}'
                 conv = getattr(self, name)
                 X = conv(X)
 
-            X = self.final(X)
-            X = F.sigmoid(X)
+            return X
 
-            return X.view(-1)
+    class Discriminator(DCGAN.Discriminator):
+
+        def _model_generator(self):
+            super()._model_generator()
+
+            self.final.stride = (3, 3)
 
 
 class FMGAN2D(GANModels):
@@ -768,10 +721,91 @@ class CramerGAN(GANModels):
         return loss
 
 
+# This has 3 optmizers & losses! Leave it for now!
+# Will have to redefine the whole backend engine!
 class InfoGAN(GANModels):
-    def __init__(self) -> None:
-        self.D = None
-        self.G = None
+    BASE_MODELS = {'dcgan': DCGAN, 'dcgan_mnist': DCGANMNIST}
+
+    class Discriminator(DCGAN.Discriminator):
+        def __init__(self, img_shape, num_classes, code_dim=2,
+                     hidden_channels=[64, 128, 256],
+                     kernel_size=4, **kwargs):
+            super().__init__(img_shape, hidden_channels=hidden_channels,
+                             kernel_size=kernel_size, **kwargs)
+            self.num_classes = num_classes
+            self.code_dim = code_dim
+
+            self._model_generator()
+
+        def get_output_shape(self, model, image_dim):
+            return model(th.rand(*(image_dim))).data.shape
+
+        def _model_generator(self):
+            super()._model_generator()
+            del self.final
+
+            layer_dim = [1] + list(self.img_shape)
+            for i, channels in enumerate(self.hidden_channels):
+                name = f'conv{i}'
+                layer = getattr(self, name)
+                layer_dim = self.get_output_shape(layer, layer_dim)
+
+            self.layer_dim = th.prod(th.tensor(layer_dim)).item()
+            self.adv_layer = nn.Linear(self.layer_dim, 1)
+            self.aux_layer = nn.Sequential(*[
+                nn.Linear(self.layer_dim, self.num_classes),
+                nn.Softmax()
+            ])
+            self.latent_layer = nn.Linear(self.layer_dim, self.code_dim)
+
+        def forward(self, X):
+            for i, _ in enumerate(self.hidden_channels):
+                name = f'conv{i}'
+                conv = getattr(self, name)
+                X = conv(X)
+
+            X = X.view(-1, self.layer_dim)
+            validity = self.adv_layer(X)
+            label = self.aux_layer(X)
+            latent_code = self.latent_layer(X)
+
+            return validity, label, latent_code
+
+    def __init__(self, latent_dim, img_shape,  num_classes,
+                 code_dim=2, lambdas={'cat': 1, 'cont': 0.1},
+                 **model_args) -> None:
+        super().__init__(latent_dim, img_shape, **model_args)
+
+        model_type = model_args['model_type']
+        self.model = self.BASE_MODELS[model_type]
+        self.model_args = model_args
+
+        self.adversarial_loss = nn.MSELoss()
+        self.categorical_loss = nn.CrossEntropyLoss()
+        self.continuous_loss = nn.MSELoss()
+
+        # Create G & D again as we are setting MLP or DCGAN as base!
+        self.G = self.model.Generator(
+            img_shape, latent_dim, **model_args['generator'])
+
+    def D_loss(self, batch):
+        loss = None
+        return loss
+
+    def G_loss(self, batch):
+        real, _ = batch
+
+        # Fake
+        z = th.randn(real.shape[0], self.latent_dim, device=self.device)
+        self.gen_imgs = self.G(z)       # Also for logging in TensorBoard
+        fake_preds = self.D(self.gen_imgs)
+
+        loss = -th.mean(fake_preds)
+
+        return loss
+
+    def info_loss(self, batch):
+        pass
 
 
 class CycleGAN(GANModels):
