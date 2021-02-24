@@ -40,7 +40,7 @@ def main(args):
 
     img_shape = data_loader.train_data[0][0].shape
 
-    model = Engine.from_argparse_args(args, out_dim=img_shape)
+    model = Engine.from_argparse_args(args, img_shape=img_shape)
 
     save_args(args, log_dir)
 
