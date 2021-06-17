@@ -1,7 +1,8 @@
+from abc import ABC, abstractmethod
+
 import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
-from abc import ABC, abstractmethod
 
 from gan_models.utils import filtered_kwargs
 
